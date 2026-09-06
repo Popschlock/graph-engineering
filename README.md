@@ -9,7 +9,7 @@ Long work in Claude Code dies two ways: the session's context fills, and the hum
 ## Install
 
 From a local checkout: `/plugin marketplace add <path to your checkout>` then `/plugin install graph-engineering@graph-engineering`. A directory source is installed by copying the whole checkout, so keep it clean — whatever is sitting in it (a scratch file, a half-finished branch, another project's `ge/`) is copied too.
-From GitHub (once published): `/plugin marketplace add Popschlock/graph-engineering` then the same install line.
+From GitHub: `/plugin marketplace add Popschlock/graph-engineering` then the same install line.
 Requires Python 3 on PATH as `python` — the hook and every skill invoke `python`. No other dependency; no network at runtime.
 Installing also arms a `SessionStart` hook: it reads the `ge/` files only — never a guard command — and prints one line per roadmap that is in progress, paused, stopped, or has open calls, so a fresh session knows a run is mid-flight. One roadmap it cannot read is named on its own line and the rest still print.
 
