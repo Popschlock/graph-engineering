@@ -6,8 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python",
-            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/session-start.py"],
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.py\" || python \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.py\"",
             "timeout": 5,
             "statusMessage": "Graph Engineering: roadmaps in flight"
           }

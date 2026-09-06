@@ -1,5 +1,6 @@
 import datetime
 import subprocess
+import time
 from pathlib import Path
 
 import ge
@@ -154,3 +155,86 @@ def test_brief_mismatch_and_match(project, capsys):
     assert "# kickoff: A" in out and "docs/plan.md §1" in out and "Project rule one." in out and "Never ask a question" in out
     (d / "next.md").write_text("# kickoff: A\n\nthe real kickoff\n", encoding="utf-8")
     assert ge.main(["brief", "demo"]) == 0 and "the real kickoff" in capsys.readouterr().out
+
+# a floor is a RATCHET on the first capture group; and a five-column table must not break a four-column one.
+FLOORS = """# ge config — floors
+
+## Gates
+| name | command | success | artifact | floor |
+|---|---|---|---|---|
+| over | python -c "print('45 passed')" | `(?m)^(\\d+) passed` | stdout | 45 |
+| under | python -c "print('44 passed')" | `(?m)^(\\d+) passed` | stdout | 45 |
+| nofloor | python -c "print('1 passed')" | `(?m)^(\\d+) passed` | stdout | |
+| words | python -c "print('all green')" | `all (\\w+)` | stdout | 3 |
+| nogroup | python -c "print('3 passed')" | `passed` | stdout | 3 |
+| badfloor | python -c "print('3 passed')" | `(\\d+) passed` | stdout | lots |
+"""
+
+def test_gate_floor_is_a_ratchet(project, capsys):
+    """`(\\d+) passed` reads a suite that LOST half its tests exactly as green as one that grew."""
+    setup(project); (project / "ge/config.md").write_text(FLOORS, encoding="utf-8")
+    assert ge.main(["gate", "demo", "over"]) == 0 and "MATCH over: 45 (" in capsys.readouterr().out
+    assert ge.main(["gate", "demo", "under"]) == 1
+    out = capsys.readouterr().out
+    assert "NO MATCH under: 44 — 44 is below the floor of 45" in out
+    assert ge.main(["gate", "demo", "nofloor"]) == 0        # an empty floor cell is no floor at all
+    assert "MATCH nofloor: 1 (" in capsys.readouterr().out
+
+def test_gate_floor_fails_closed(project, capsys):
+    """A floor that cannot be evaluated is a refusal, never a pass: each of these MATCHes its regex."""
+    setup(project); (project / "ge/config.md").write_text(FLOORS, encoding="utf-8")
+    assert ge.main(["gate", "demo", "words"]) == 1
+    assert "the capture 'green' is not a number" in capsys.readouterr().out
+    assert ge.main(["gate", "demo", "nogroup"]) == 1
+    assert "no capture group to read" in capsys.readouterr().out
+    assert ge.main(["gate", "demo", "badfloor"]) == 1
+    assert "floor 'lots' is not a whole number" in capsys.readouterr().out
+
+def test_a_four_column_gates_table_still_parses(project):
+    """The shipped example keeps four columns on purpose: the positive control for the old shape."""
+    setup(project)
+    g = ge.parse_config(project / "ge/config.md").gates["echo"]
+    assert g.artifact == "stdout" and g.floor == ""
+    assert ge.parse_config(REPO / "examples/hello-roadmap/ge/config.md").gates["pytest"].floor == ""
+
+SLOW = """# ge config — slow
+
+## Gates
+| name | command | success | artifact |
+|---|---|---|---|
+| hang | python -c "print('7 passed', flush=True); import time; time.sleep(30)" | `(\\d+) passed` | stdout |
+
+## Guards
+| name | command | blocked when |
+|---|---|---|
+| hangguard | python -c "import time; time.sleep(30)" | `RUNNING` |
+"""
+
+def test_a_gate_that_times_out_is_no_match_not_a_match_on_partial_output(project, capsys, monkeypatch):
+    """The command prints the pattern and THEN hangs: a kill that kept the partial output and matched it
+    would read green off a suite that never finished."""
+    setup(project); (project / "ge/config.md").write_text(SLOW, encoding="utf-8")
+    monkeypatch.setattr(ge, "GATE_TIMEOUT", 1)
+    assert ge.main(["gate", "demo", "hang"]) == 1
+    out = capsys.readouterr().out
+    assert "NO MATCH hang: the command timed out after 1s" in out and "MATCH hang: 7" not in out
+    assert "  7 passed" in out          # the tail proves the pattern WAS in the text and was refused anyway
+
+def test_a_gate_timeout_bounds_the_wall_clock(project, monkeypatch):
+    """A shell=True command is a SHELL whose child does the work. Kill only the shell and the child keeps
+    the output pipe open, so the read that follows returns when the GRANDCHILD exits — 30 s here, and never
+    for a real hang. The NO MATCH above is green either way; only the clock can see this."""
+    setup(project); (project / "ge/config.md").write_text(SLOW, encoding="utf-8")
+    monkeypatch.setattr(ge, "GATE_TIMEOUT", 1)
+    t0 = time.perf_counter(); assert ge.main(["gate", "demo", "hang"]) == 1
+    took = time.perf_counter() - t0
+    assert took < 15, f"the 30 s grandchild outlived its 1 s timeout: {took:.1f}s"
+
+def test_a_guard_that_times_out_is_an_error_not_ok(project, capsys, monkeypatch):
+    """`ok` would dispatch a node. An unattended runner reads ERROR as blocking, which is what a check
+    that could not run means."""
+    setup(project); (project / "ge/config.md").write_text(SLOW, encoding="utf-8")
+    monkeypatch.setattr(ge, "GUARD_TIMEOUT", 1)
+    assert ge.main(["guards", "demo"]) == 0
+    out = capsys.readouterr().out
+    assert "guard hangguard: ERROR timed out after 1s" in out and "guard hangguard: ok" not in out

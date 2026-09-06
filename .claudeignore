@@ -1,0 +1,17 @@
+# A directory source is installed by COPYING this checkout, so nothing below has any
+# business in a plugin cache. Whether the installer honours this file is undocumented
+# (see the spec, section 9): it is a statement of intent, and the standing answer to a
+# dirty checkout is still to clean the checkout.
+#
+# Everything the spec's section 9 ships stays OUT of this list on purpose:
+# .claude-plugin/, skills/, agents/, hooks/, scripts/, tests/, examples/, docs/, README.md.
+.git/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.log
+node_modules/
+.DS_Store
+Thumbs.db
+.in_use/
+.superpowers/

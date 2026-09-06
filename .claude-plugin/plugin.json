@@ -2,7 +2,7 @@
   "name": "graph-engineering",
   "displayName": "Graph Engineering",
   "description": "Turn a goal into a task graph, run it unattended from one interactive session (a fresh subagent per node, an independent verifier per close, a review on a cadence), and pause it to human-test, get a summary, or change the goal. Files in your git; any project, any gate.",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "author": { "name": "Popschlock" },
   "homepage": "https://github.com/Popschlock/graph-engineering",
   "repository": "https://github.com/Popschlock/graph-engineering",

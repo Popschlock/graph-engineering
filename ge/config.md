@@ -1,9 +1,9 @@
 # ge config — graph-engineering
 
 ## Gates
-| name | command | success | artifact |
-|---|---|---|---|
-| pytest | python -m pytest tests/ -q | `(?m)^(\d+) passed(?![^\n]*\b(?:failed\|error))` | stdout |
+| name | command | success | artifact | floor |
+|---|---|---|---|---|
+| pytest | python -m pytest tests/ -q | `(?m)^(\d+) passed(?![^\n]*\b(?:failed\|error))` | stdout | 62 |
 
 ## Guards
 | name | command | blocked when |

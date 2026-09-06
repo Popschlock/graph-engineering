@@ -1,4 +1,4 @@
-# Graph Engineering — design spec (v0.1)
+# Graph Engineering — design spec (v0.2)
 
 Approved by the owner 2026-09-05. A first, project-specific version of this idea
 (a `/run-roadmap` skill and four bespoke agents, written for a single private
@@ -73,11 +73,11 @@ ge/
 # ge config — <project>
 
 ## Gates
-| name | command | success | artifact |
-|---|---|---|---|
-| typecheck | npm run typecheck | `Found 0 errors` | stdout |
-| unit | pytest -q | `(?m)^(\d+) passed` | stdout |
-| e2e | npm run e2e | `(\d+) passing, 0 failing` | logs/e2e_*.log |
+| name | command | success | artifact | floor |
+|---|---|---|---|---|
+| typecheck | npm run typecheck | `Found 0 errors` | stdout | |
+| unit | pytest -q | `(?m)^(\d+) passed` | stdout | 240 |
+| e2e | npm run e2e | `(\d+) passing, 0 failing` | logs/e2e_*.log | 12 |
 
 ## Guards
 | name | command | blocked when |
@@ -102,6 +102,18 @@ review every: 3
 * A gate's `success` is a regex matched against the artifact (a file glob, or
   `stdout` of the command run by the verifier); a capture group `\1` may be
   compared across matches. The verifier never trusts a commit message's numbers.
+* A gate's `floor` is optional and is a RATCHET: the first capture group must be a
+  number at or above it. `(\d+) passed` matches a suite that SHRANK as happily as
+  one that grew, so a deleted test reads green; the floor is what notices. It fails
+  CLOSED — a floor that is not a number, a `success` with no capture group, and a
+  capture that is not a number are each a `NO MATCH`, never a pass. A four-column
+  `## Gates` table is still valid and means no gate has a floor.
+* Every gate and guard command runs under a TIMEOUT (a gate 3600 s, a guard 30 s;
+  `GATE_TIMEOUT` / `GUARD_TIMEOUT` in `ge.py`), because a command that never
+  returns would hold an unattended runner for ever. The kill fails closed too:
+  whatever the command had written is kept, a `ge: TIMEOUT after <n>s` line is
+  appended to it, and the gate reads `NO MATCH` and the guard `ERROR` — never
+  `ok`, and never a `MATCH` on partial output that happened to hold the pattern.
 * A guard's command output matched by `blocked when` means the runner waits: the
   row above holds every dispatch while a migration container is up. `blocked when`
   names the state that BLOCKS, never the healthy one.
@@ -129,9 +141,15 @@ the ledger).
 | date | session | task | event | outcome | commit |
 ```
 
-Events: `done`, `miss` (verifier), `blocked`, `paused <reason>`, `resumed`,
-`revised`, `review`. One row per event, appended only. `resumed` is written only
-when a hold was actually lifted: `resume` on a roadmap that is neither paused nor
+Events: `done`, `re-closed`, `miss` (verifier), `blocked`, `paused <reason>`,
+`resumed`, `revised`, `review`. One row per event, appended only. A node keeps
+exactly ONE `done` row: a close repeated with the SAME hash writes nothing at all
+(status.html's generated-at stamp would otherwise dirty a committed file), and a
+close repeated with a DIFFERENT hash moves the row's status and commit and appends
+`re-closed`, naming the hash it replaced. Two `done` rows for one node would read
+as a node that was done twice.
+
+`resumed` is written only when a hold was actually lifted: `resume` on a roadmap that is neither paused nor
 stopped removes nothing and adds no row, because a row saying a hold was lifted
 when none was is a false ledger.
 
@@ -149,7 +167,10 @@ SVG laid out by dependency depth, nodes coloured by status (open grey, ready
 blue, in progress amber, done green, blocked red, skipped hatched), edges as
 arrows, phase bands; the ledger's last 20 rows; open calls; the last close's gate
 numbers; generated-at; `<meta http-equiv="refresh" content="60">` so an open tab
-follows the run.
+follows the run. A held roadmap says so in a banner under the title — `STOPPED`
+or `PAUSED: <reason> — <note>`, STOP winning over PAUSE — because the page is
+what a human watches, and a graph of green nodes that has quietly stopped
+dispatching looks exactly like one that is still running.
 
 ## 3. `scripts/ge.py` — the only structured reader/writer
 
@@ -170,7 +191,7 @@ ge.py ledger <r> [n]                         last n rows
 ge.py event <r> <event> "<outcome>" [--session S]        a non-task ledger row (paused, resumed, revised, review)
 ge.py render <r>                             status.html
 ge.py gate <r> <name>                        run a gate's command (or read its artifact) and report match/no match with captures
-ge.py init <r> --goal "<text>"               a new roadmap folder with an empty table
+ge.py init <r> --goal "<t>" [--subject "<t>"] a new roadmap folder with an empty table
 ge.py add <r> --id --subject --deps --spec --gate [--after id]   a task row
 ge.py set <r> <id> --status|--deps|--spec|--gate|--subject
 ```
@@ -248,7 +269,8 @@ and the rest still print. Nothing else.
 ## 9. Packaging and publishing
 
 PromptFu's layout: `.claude-plugin/plugin.json` and `marketplace.json` (name
-`graph-engineering`, version 0.1.0, MIT, `Popschlock/graph-engineering`),
+`graph-engineering`, MIT, `Popschlock/graph-engineering`; both files carry the SAME
+`version` string and the plugin cache is keyed by it, so a release bumps both),
 `skills/ge-*/SKILL.md`, `agents/ge-*.md`, `hooks/hooks.json` + the hook script,
 `scripts/ge.py`, `tests/`, `examples/hello-roadmap/` (a tiny project with a
 `ge/` folder whose gates are `python -m pytest`), `README.md` (the idea, install,
@@ -256,6 +278,21 @@ the commands, the file formats, the metering note), `docs/` (this spec, the plan
 Install locally while developing: `/plugin marketplace add <path to your checkout>`
 then `/plugin install graph-engineering@graph-engineering`; from GitHub once pushed.
 Pushing to GitHub is the owner's word, not automatic.
+
+A directory source is installed by copying the checkout, so the repo ships a root
+`.claudeignore` naming what a copy has no business carrying: `.git/`, the Python
+caches, `*.log` and the scratch paths. Whether the installer honours that file is
+NOT documented anywhere we could find, so the file is a statement of intent and not
+a guarantee: the standing caveat holds that a directory install copies whatever is
+sitting in the checkout, and the answer to a dirty checkout is to clean it.
+
+The `SessionStart` hook launches an interpreter by name, and `python` does not
+exist on a box whose only interpreter is `python3`. A hook entry that carries an
+`args` array is spawned directly with no shell; one that puts everything in
+`command` is run THROUGH a shell. `hooks/hooks.json` therefore uses the shell form,
+`python3 <script> || python <script>`, which reads the same in `sh` and in
+`cmd.exe`. The short-circuit means the script runs exactly once, and it only reads
+files and prints, so even a double run would be harmless.
 
 ## 10. Dogfood and the first migration
 
@@ -269,8 +306,29 @@ bespoke per-project agents retired, and its own `/run-roadmap` skill replaced by
 against a fictional project, so the shape is readable without any one project's
 details.
 
-## 11. Non-goals for 0.1
+## 11. Non-goals for 0.2
 
 Parallel dispatch of independent ready nodes (designed for: `ready` returns
 several; the runner takes one), a headless loop, cloud routines, a web UI beyond
 the static HTML, any store other than Markdown files.
+
+## 12. What 0.2 changed
+
+Nine minors off the 0.1.2 review, each pinned by a test in `tests/`:
+
+1. The `SessionStart` hook tries `python3` and falls back to `python` (§9), so a
+   box whose only interpreter is `python3` still gets its mid-flight line.
+2. `## Gates` gains an optional `floor` column (§2.2): the ratchet that a green
+   regex over a SHRUNKEN suite cannot pass.
+3. `ge.py init` takes `--subject`, so a new roadmap's title line is the human's
+   words and not the first 60 characters of the goal.
+4. `status.html` draws STOP and PAUSE in a banner (§2.6).
+5. Every gate and guard command runs under a timeout, failing closed (§2.2).
+6. `ge.py pause` flattens newlines out of the REASON as well as the note: line 1 of
+   `PAUSE` is the whole reason, because line 1 is all `pause_state` and the hook
+   ever read, and the rest became a note nobody wrote.
+7. A re-close with a new hash appends `re-closed`, never a second `done` (§2.4).
+8. `/ge-build-roadmap` and `/ge-revise-roadmap` are told, as `/ge-run-roadmap`
+   already was, that `ge.py next` writes `in progress:` lines on stderr — a
+   stranded node, not an error, and never part of the id they read off stdout.
+9. A root `.claudeignore` for a directory install (§9).

@@ -239,3 +239,37 @@ def test_init_over_an_existing_roadmap_exits_1(project, capsys):
     assert ge.main(["init", "demo", "--goal", "ship it"]) == 0
     assert ge.main(["init", "demo", "--goal", "ship it again"]) == 1
     assert "exists:" in capsys.readouterr().err
+
+def test_init_takes_a_subject(project):
+    """Without it the title line is the goal's first 60 characters, cut mid-word."""
+    assert ge.main(["init", "demo", "--goal", "a long goal that would be sliced at sixty characters and then some",
+                    "--subject", "the greeter"]) == 0
+    first = (project / "ge/demo/roadmap.md").read_text(encoding="utf-8").split("\n")[0]
+    assert first == "# demo — the greeter"
+    assert ge.main(["init", "other", "--goal", "ship it"]) == 0
+    assert (project / "ge/other/roadmap.md").read_text(encoding="utf-8").split("\n")[0] == "# other — ship it"
+
+def test_a_re_close_with_a_new_hash_appends_re_closed_not_a_second_done(project, capsys):
+    """Two `done` rows for one node read as a node that was done twice; the correction says what it replaced."""
+    write_roadmap(project, "demo", ROWS3)
+    assert ge.main(["close", "demo", "A", "abc1234", "pytest=45; first"]) == 0
+    capsys.readouterr()
+    assert ge.main(["close", "demo", "A", "def5678", "pytest=46; corrected", "--session", "s2"]) == 0
+    assert capsys.readouterr().out.strip() == "A: re-closed done def5678"
+    rows = ge.read_ledger("demo")
+    assert [r[3] for r in rows] == ["done", "re-closed"]
+    assert rows[-1][5] == "def5678" and "was abc1234" in rows[-1][4] and rows[-1][1] == "s2"
+    n = ge.by_id(ge.load("demo"))["A"]
+    assert n.status == "done def5678" and n.commit == "def5678"
+    assert "def5678" in (project / "ge/demo/status.html").read_text(encoding="utf-8")   # the LAST close
+    assert ge.main(["close", "demo", "A", "def5678", "again"]) == 0                     # still idempotent
+    assert len(ge.read_ledger("demo")) == 2
+
+def test_pause_flattens_the_reason_too(project):
+    """PAUSE line 1 IS the reason: a newline in it truncated the reason and pushed the note down a line."""
+    write_roadmap(project, "demo", ROWS3)
+    assert ge.main(["pause", "demo", "summary lighting\nand shadows", "look at the sea"]) == 0
+    assert (project / "ge/demo/PAUSE").read_text(encoding="utf-8") == "summary lighting and shadows\nlook at the sea\n"
+    assert ge.pause_state("demo") == ("summary lighting and shadows", "look at the sea")
+    assert ge.roadmap_state("demo")[3] == "paused: summary lighting and shadows"
+    assert ge.main(["pause", "demo", "\n \n"]) == 1        # a reason that is only newlines is still empty

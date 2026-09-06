@@ -4,7 +4,7 @@ Run from the project root (or with --root <dir>): python ge.py <command> [args].
 Exit 0 ok, 1 not found/invalid, 2 validation failure (reasons printed).
 Sections: 1 model+parse | 2 graph | 3 writers | 4 config+gate+guards+brief | 5 render | 6 pause+open | 7 cli
 """
-import argparse, datetime, glob, os, re, subprocess, sys
+import argparse, datetime, glob, os, re, signal, subprocess, sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -23,6 +23,7 @@ class Roadmap:
 def ge_root(): return (Path.cwd() / "ge").resolve()
 def rdir(r): return ge_root() / r
 def split_list(s): return [x.strip() for x in s.split(",") if x.strip()]
+def flatten(s): return re.sub(r"[\r\n]+", " ", s or "").strip()
 def is_sep(line): return re.match(r"^\|?\s*:?-{3,}", line.strip()) is not None
 
 def cells(line):
@@ -207,17 +208,20 @@ def read_ledger(r, n=None):
     return rows[-n:] if n else rows
 
 def close(r, nid, h, outcome, session=""):
-    """status -> done <hash>, commit column, ledger row, render. Idempotent: a node already done <hash> with a
-    done row writes NOTHING at all — not even status.html, whose generated-at stamp would otherwise make a
-    second close a real change to a committed file."""
+    """status -> done <hash>, commit column, ledger row, render. -> "" on a first close, "already" when the
+    SAME hash is closed twice — which writes NOTHING at all, not even status.html, whose generated-at stamp
+    would otherwise make a second close a real change to a committed file — and "re-closed" when a DIFFERENT
+    hash replaces one already recorded. A node keeps exactly ONE `done` row: a second would read as a node
+    that was done twice, so a correction is appended as `re-closed` and names the hash it replaced."""
     rm = load(r); n = by_id(rm).get(nid)
     if n is None: raise KeyError(nid)
-    already = n.status == f"done {h}" and any(x[2] == nid and x[3] == "done" for x in read_ledger(r))
-    if not already:
-        n.status, n.commit = f"done {h}", h; rm.lines[n.line] = fmt_row(n); save(rm)
-        append_ledger(r, nid, "done", outcome, h, session)
-        render_to_file(r)
-    return already
+    prior = [x for x in read_ledger(r) if len(x) > 5 and x[2] == nid and x[3] in ("done", "re-closed")]
+    if n.status == f"done {h}" and prior: return "already"
+    n.status, n.commit = f"done {h}", h; rm.lines[n.line] = fmt_row(n); save(rm)
+    if prior: append_ledger(r, nid, "re-closed", f"{outcome} (was {prior[-1][5] or 'no hash'})", h, session)
+    else: append_ledger(r, nid, "done", outcome, h, session)
+    render_to_file(r)
+    return "re-closed" if prior else ""
 
 def block(r, nid, why, session=""):
     set_field(load(r), nid, "status", "blocked: " + why); append_ledger(r, nid, "blocked", why, "", session)
@@ -225,7 +229,7 @@ def block(r, nid, why, session=""):
 
 # ---- 4. config + gate + guards + brief ----------------------------------------
 @dataclass
-class Gate: name: str; command: str; success: str; artifact: str
+class Gate: name: str; command: str; success: str; artifact: str; floor: str = ""
 @dataclass
 class Guard: name: str; command: str; blocked_when: str
 @dataclass
@@ -250,7 +254,7 @@ def parse_config(path):
     if not path.is_file(): return cfg
     lines = path.read_text(encoding="utf-8").split("\n")
     for r in table(lines, "## Gates"):
-        r += [""] * 4; cfg.gates[r[0]] = Gate(r[0], r[1], r[2], r[3] or "stdout")
+        r += [""] * 5; cfg.gates[r[0]] = Gate(r[0], r[1], r[2], r[3] or "stdout", r[4])
     for r in table(lines, "## Guards"):
         r += [""] * 3; cfg.guards[r[0]] = Guard(r[0], r[1], r[2])
     for r in table(lines, "## Tiers"):
@@ -262,30 +266,74 @@ def parse_config(path):
         if m: cfg.review_every = int(m.group(1))
     return cfg
 
-def run_cmd(cmd):
-    """stdout+stderr, decoded the same way an artifact file is: utf-8, undecodable bytes replaced."""
-    p = subprocess.run(cmd, shell=True, capture_output=True, text=True, encoding="utf-8", errors="replace")
-    return (p.stdout or "") + (p.stderr or "")
+GATE_TIMEOUT, GUARD_TIMEOUT = 3600, 30
+TIMEOUT_MARK = "ge: TIMEOUT after "
+
+def kill_tree(p):
+    """A shell=True command is a SHELL whose child does the work. Killing only the shell leaves that child
+    running AND holding the output pipe, so the wait that follows returns when the GRANDCHILD exits — which
+    for a hung command is never, and a timeout that does not bound the wall clock is worse than none,
+    because it claims a safety it does not have."""
+    try:
+        if os.name == "nt": subprocess.run(["taskkill", "/F", "/T", "/PID", str(p.pid)], capture_output=True)
+        else: os.killpg(os.getpgid(p.pid), signal.SIGKILL)
+    except Exception: pass
+    try: p.kill()
+    except Exception: pass
+
+def run_cmd(cmd, timeout=None):
+    """stdout+stderr, decoded the same way an artifact file is: utf-8, undecodable bytes replaced.
+    A command that never returns would hold an unattended runner for ever, so its whole process tree is
+    killed at <timeout> seconds. That fails CLOSED: whatever it had already written is kept and a
+    TIMEOUT_MARK line is appended, which run_gate turns into NO MATCH and guards into ERROR — never a MATCH
+    on partial output that happened to hold the pattern, and never `ok`."""
+    kw = {} if os.name == "nt" else {"start_new_session": True}   # a group os.killpg can take out at once
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                         encoding="utf-8", errors="replace", **kw)
+    try:
+        return p.communicate(timeout=timeout)[0] or ""
+    except subprocess.TimeoutExpired:
+        kill_tree(p)
+        try: out = p.communicate(timeout=30)[0] or ""   # the tree is down, so the pipe closes; retry is safe
+        except Exception: out = ""
+        return out + f"\n{TIMEOUT_MARK}{timeout}s: {cmd}\n"
 
 def newest(pattern):
     hits = glob.glob(pattern, recursive=True)
     return max(hits, key=os.path.getmtime) if hits else None
 
+def floor_refusal(g, caps):
+    """-> "" when a gate clears its floor, else the reason it does not. A floor is a RATCHET on the first
+    capture group: `(\\d+) passed` reads a suite that lost half its tests exactly as green as one that grew,
+    and only a floor notices. It fails CLOSED — a floor that is not a whole number, a success regex with no
+    capture group, and a capture that is not a number are each a refusal, never a pass."""
+    if not (g.floor or "").strip(): return ""
+    try: floor = int(g.floor.strip())
+    except ValueError: return f"floor {g.floor!r} is not a whole number"
+    if not caps: return f"floor {floor}, but the success regex has no capture group to read"
+    try: got = int(str(caps[0]).strip())
+    except (TypeError, ValueError): return f"floor {floor}, but the capture {caps[0]!r} is not a number"
+    return "" if got >= floor else f"{got} is below the floor of {floor}"
+
 def run_gate(g):
     """artifact 'stdout' -> run the command; else read the newest file matching the glob.
-    -> (matched, captures, source, text). text is what was searched, so a NO MATCH can show its tail
+    -> (matched, captures, source, text, why). text is what was searched, so a NO MATCH can show its tail
     without the caller re-running a long command. A file source carries its mtime ('<path>, <ISO seconds>'):
     a MATCH read out of a file written before the work commit is a stale artifact, and the verifier can
-    only see that if the time is printed. A malformed success regex raises re.error: the caller reports it
-    rather than a traceback."""
-    if g.artifact in ("", "stdout"): text, src = run_cmd(g.command), "stdout of " + g.command
+    only see that if the time is printed. `why` names a refusal a bare regex miss cannot — a command that
+    timed out, or a capture under the gate's floor — so a NO MATCH says which of the two it is. A malformed
+    success regex raises re.error: the caller reports it rather than a traceback."""
+    if g.artifact in ("", "stdout"): text, src = run_cmd(g.command, GATE_TIMEOUT), "stdout of " + g.command
     else:
         f = newest(g.artifact)
-        if not f: return False, [], "no artifact matches " + g.artifact, ""
+        if not f: return False, [], "no artifact matches " + g.artifact, "", ""
         mtime = datetime.datetime.fromtimestamp(os.path.getmtime(f)).isoformat(timespec="seconds")
         text, src = Path(f).read_text(encoding="utf-8", errors="replace"), f"{f}, {mtime}"
+    if TIMEOUT_MARK in text: return False, [], src, text, f"the command timed out after {GATE_TIMEOUT}s"
     m = re.search(g.success, text)
-    return m is not None, (list(m.groups()) if m else []), src, text
+    if m is None: return False, [], src, text, ""
+    caps = list(m.groups()); why = floor_refusal(g, caps)
+    return why == "", caps, src, text, why
 
 def pause_state(r):
     p = rdir(r) / "PAUSE"
@@ -305,9 +353,11 @@ def guards(r, cfg):
         else: yield "tree: DIRTY" if st.stdout.strip() else "tree: clean"
     except Exception as e: yield f"tree: UNKNOWN (git {type(e).__name__}: {e})"
     for g in cfg.guards.values():
-        try: hit = re.search(g.blocked_when, run_cmd(g.command))
-        except re.error as e: yield f"guard {g.name}: ERROR bad regex {e}"; continue
+        try: out = run_cmd(g.command, GUARD_TIMEOUT)
         except Exception as e: yield f"guard {g.name}: ERROR {type(e).__name__}: {e}"; continue
+        if TIMEOUT_MARK in out: yield f"guard {g.name}: ERROR timed out after {GUARD_TIMEOUT}s"; continue
+        try: hit = re.search(g.blocked_when, out)
+        except re.error as e: yield f"guard {g.name}: ERROR bad regex {e}"; continue
         yield f"guard {g.name}: {'BLOCKED' if hit else 'ok'}"
 
 DEFAULT_RULES = """# Graph Engineering — the unattended rules (prepended to every brief)
@@ -380,7 +430,7 @@ def layout(rm):
 def node_colour(n, ready_ids):
     return COLOURS["ready"] if n.id in ready_ids else COLOURS.get(kind(n.status), COLOURS["open"])
 
-def render(rm, cfg, ledger_rows, calls_open):
+def render(rm, cfg, ledger_rows, calls_open, hold=""):
     pos, bands = layout(rm); rid = {n.id for n in ready(rm)}
     CW, RH, W, H, X0, Y0 = 210, 46, 180, 34, 20, 30
     ncols = max([c for c, _r in pos.values()], default=0) + 1; nrows = max([r for _c, r in pos.values()], default=0) + 1
@@ -406,7 +456,7 @@ def render(rm, cfg, ledger_rows, calls_open):
                    f'<text x="{x + 6}" y="{y + 14}" fill="{tc}" font-weight="bold">{esc(n.id)}</text>'
                    f'<text x="{x + 6}" y="{y + 27}" fill="{tc}">{esc(n.subject[:28])}</text></g>')
     svg.append("</svg>")
-    last = next((x for x in reversed(ledger_rows) if len(x) > 4 and x[3] == "done"), None)
+    last = next((x for x in reversed(ledger_rows) if len(x) > 4 and x[3] in ("done", "re-closed")), None)
     last_txt = esc(" | ".join(last)) if last else "none yet"
     tail = "".join("<tr>" + "".join(f"<td>{esc(c)}</td>" for c in x) + "</tr>" for x in ledger_rows[-20:])
     calls = "".join(f"<li>{esc(c)}</li>" for c in calls_open) or "<li>none</li>"
@@ -414,24 +464,37 @@ def render(rm, cfg, ledger_rows, calls_open):
     legend = "".join(f'<span style="background:{v};color:{"#000" if k in ("open", "skipped") else "#fff"}">{k}</span>'
                      for k, v in COLOURS.items() if k != "skipped") + '<span style="background:#ddd;color:#000">skipped</span>'
     now = datetime.datetime.now().isoformat(timespec="seconds"); name = esc(rm.name); g = esc(goal(rm)); graph = "".join(svg)
+    # a graph of green nodes that has quietly stopped dispatching looks exactly like one still running
+    banner = (f'<p class="hold" style="background:{COLOURS["blocked"] if hold.startswith("STOPPED") else COLOURS["in progress"]}">'
+              f'{esc(hold)}</p>') if hold else ""
     return ('<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="60">'
             f'<title>ge: {name}</title><style>body{{font-family:system-ui,sans-serif;margin:20px;color:#222}}'
             'table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #ddd;padding:3px 6px;text-align:left}'
-            '.legend span{display:inline-block;padding:2px 8px;margin-right:6px;border-radius:3px}pre{white-space:pre-wrap}</style></head><body>'
-            f'<h1>{name}</h1><p>generated {now} — refreshes every 60 s — gates: {gates}</p><h2>Goal</h2><pre>{g}</pre>'
+            '.legend span{display:inline-block;padding:2px 8px;margin-right:6px;border-radius:3px}pre{white-space:pre-wrap}'
+            '.hold{display:inline-block;padding:6px 12px;border-radius:4px;color:#fff;font-weight:bold}</style></head><body>'
+            f'<h1>{name}</h1>{banner}<p>generated {now} — refreshes every 60 s — gates: {gates}</p><h2>Goal</h2><pre>{g}</pre>'
             f'<p class="legend">{legend}</p>{graph}<h2>Last close</h2><p>{last_txt}</p><h2>Open calls</h2><ul>{calls}</ul>'
             '<h2>Ledger (last 20)</h2><table><tr><th>date</th><th>session</th><th>task</th><th>event</th><th>outcome</th><th>commit</th></tr>'
             f'{tail}</table></body></html>')
 
+def hold_line(r):
+    """-> the banner status.html draws for a held roadmap, or "". STOP wins over PAUSE: a stopped roadmap
+    dispatches nothing whatever a PAUSE file beside it says."""
+    if (rdir(r) / "STOP").is_file(): return "STOPPED — no node is dispatched until /ge-resume-roadmap"
+    ps = pause_state(r)
+    return ("PAUSED: " + ps[0] + (" — " + ps[1] if ps[1] else "")) if ps else ""
+
 def render_to_file(r):
-    rm = load(r); html = render(rm, parse_config(ge_root() / "config.md"), read_ledger(r), read_calls(r)[0])
+    rm = load(r)
+    html = render(rm, parse_config(ge_root() / "config.md"), read_ledger(r), read_calls(r)[0], hold_line(r))
     wtext(rdir(r) / "status.html", html); return rdir(r) / "status.html"
 
 # ---- 6. pause + open --------------------------------------------------------
 def pause(r, reason, note=""):
-    """PAUSE is line 1 = reason, line 2 = note, and pause_state reads exactly that: a newline inside the note
-    would become a third line nothing reads, so it is flattened to spaces."""
-    note = re.sub(r"[\r\n]+", " ", note).strip()
+    """PAUSE is line 1 = reason, line 2 = note, and pause_state, roadmap_state and the SessionStart hook all
+    read exactly that. A newline inside the NOTE would become a third line nothing reads; a newline inside the
+    REASON is worse — it truncates the reason and pushes the note onto a line nobody wrote. Both are flattened."""
+    reason, note = flatten(reason), flatten(note)
     wtext(rdir(r) / "PAUSE", reason + ("\n" + note if note else "") + "\n"); append_ledger(r, "-", "paused " + reason, note)
 
 def resume(r):
@@ -473,7 +536,7 @@ def main(argv=None):
     sub("start", "r", "id", "session"); sub("close", "r", "id", "hash", "outcome", session="")
     sub("block", "r", "id", "why", session=""); sub("event", "r", "event", "outcome", session="")
     sub("ledger", "r").add_argument("n", nargs="?", type=int, default=3)
-    sub("init", "r", goal=""); sub("add", "r", id="", subject="", deps="", spec="", gate="", after=None)
+    sub("init", "r", goal="", subject=""); sub("add", "r", id="", subject="", deps="", spec="", gate="", after=None)
     sub("set", "r", "id", status=None, deps=None, spec=None, gate=None, subject=None)
     sub("gate", "r", "name"); sub("guards", "r"); sub("brief", "r")
     sub("pause", "r", "reason").add_argument("note", nargs="?", default=""); sub("resume", "r"); sub("stop", "r")
@@ -493,7 +556,7 @@ def dispatch(a):
         return 0
     if c == "init":
         if not a.goal: print("--goal is required", file=sys.stderr); return 1
-        print(f"created {init_roadmap(a.r, a.goal)}"); return 0
+        print(f"created {init_roadmap(a.r, a.goal, a.subject)}"); return 0
     rm = load(a.r)
     if c == "validate":
         probs = validate(rm, rdir(a.r) / "next.md")
@@ -522,7 +585,7 @@ def dispatch(a):
         return 0
     if c == "start": set_field(rm, a.id, "status", f"in progress ({a.session})"); print(f"{a.id}: in progress ({a.session})"); return 0
     if c == "close":
-        already = close(a.r, a.id, a.hash, a.outcome, a.session); print(f"{a.id}: {'already ' if already else ''}done {a.hash}"); return 0
+        state = close(a.r, a.id, a.hash, a.outcome, a.session); print(f"{a.id}: {state + ' ' if state else ''}done {a.hash}"); return 0
     if c == "block": block(a.r, a.id, a.why, a.session); print(f"{a.id}: blocked: {a.why}"); return 0
     if c == "event": print(append_ledger(a.r, "-", a.event, a.outcome, "", a.session)); return 0
     if c == "ledger":
@@ -544,10 +607,11 @@ def dispatch(a):
     if c == "gate":
         g = parse_config(ge_root() / "config.md").gates.get(a.name)
         if not g: print(f"no gate named {a.name} in ge/config.md", file=sys.stderr); return 1
-        try: ok, caps, src, text = run_gate(g)
+        try: ok, caps, src, text, why = run_gate(g)
         except re.error as e: print(f"NO MATCH {a.name}: bad regex {e}"); return 1
         caught = " ".join(x or "" for x in caps).strip()  # a non-participating group is None, not a string
-        print(f"{'MATCH' if ok else 'NO MATCH'} {a.name}: {caught} ({src})".replace(":  (", ": ("))
+        detail = " — ".join(x for x in (caught, why) if x)  # why names a floor or a timeout, which no miss can
+        print(f"{'MATCH' if ok else 'NO MATCH'} {a.name}: {detail} ({src})".replace(":  (", ": ("))
         if not ok and text.strip():  # the evidence, so an unattended agent need not re-run a long command
             for line in text.splitlines()[-5:]: print("  " + line)
         return 0 if ok else 1
@@ -560,9 +624,9 @@ def dispatch(a):
         if code == 2: print("brief: next.md does not name the ready node; minimal brief built from the row", file=sys.stderr)
         return code
     if c == "pause":
-        if not a.reason.strip():  # an empty first line is a PAUSE the runner cannot act on
+        if not flatten(a.reason):  # an empty first line is a PAUSE the runner cannot act on
             print("pause: a reason is required (human-test | summary <topic> | adjust)", file=sys.stderr); return 1
-        pause(a.r, a.reason, a.note); print(f"paused {a.r}: {a.reason}"); return 0
+        pause(a.r, a.reason, a.note); print(f"paused {a.r}: {flatten(a.reason)}"); return 0
     if c == "resume": print(f"resumed {a.r}" if resume(a.r) else f"nothing to resume for {a.r}"); return 0
     if c == "stop": stop(a.r); print(f"STOP written for {a.r}"); return 0
     if c == "open":

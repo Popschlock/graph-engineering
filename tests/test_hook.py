@@ -1,7 +1,8 @@
 import json, subprocess, sys, time
 from pathlib import Path
 from conftest import write_roadmap, ROWS3
-HOOK = Path(__file__).resolve().parents[1] / "hooks" / "session-start.py"
+REPO = Path(__file__).resolve().parents[1]
+HOOK = REPO / "hooks" / "session-start.py"
 
 def test_hook_prints_mid_flight_roadmaps(project):
     (write_roadmap(project, "demo", ROWS3).parent / "PAUSE").write_text("human-test\n", encoding="utf-8")
@@ -34,3 +35,20 @@ def test_hook_prints_a_non_latin_pause_reason(project):
     p = run_hook(project)
     assert p.returncode == 0
     assert "ge: roadmap demo is paused: 待测试, 0/3 done, 0 open call(s) — /ge-status demo" in p.stdout
+
+def hooks_json_command():
+    """The one SessionStart command string the plugin ships, with the plugin root filled in."""
+    cfg = json.loads((REPO / "hooks/hooks.json").read_text(encoding="utf-8"))
+    entry = cfg["hooks"]["SessionStart"][0]["hooks"][0]
+    return entry["command"].replace("${CLAUDE_PLUGIN_ROOT}", str(REPO))
+
+def test_the_shipped_hook_command_runs_through_a_shell(project):
+    """`python3 <script> || python <script>` is a fallback only when a SHELL reads it, and only a hook entry
+    with no `args` array gets one. test_package pins the SHAPE; this runs the shipped string end to end.
+    Either name being absent is the interesting case, and it is the case on any box with just one of them."""
+    (write_roadmap(project, "demo", ROWS3).parent / "PAUSE").write_text("human-test\n", encoding="utf-8")
+    p = subprocess.run(hooks_json_command(), shell=True, input=json.dumps({"cwd": str(project)}),
+                       capture_output=True, encoding="utf-8", cwd=project)
+    assert p.returncode == 0, p.stderr
+    assert "ge: roadmap demo is paused: human-test, 0/3 done" in p.stdout
+    assert p.stdout.count("ge: roadmap demo") == 1, "|| short-circuits: the script runs once, not twice"
