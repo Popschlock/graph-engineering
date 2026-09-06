@@ -1,0 +1,13 @@
+{
+  "name": "graph-engineering",
+  "owner": { "name": "Popschlock" },
+  "description": "Turn a goal into a task graph, run it unattended from one interactive session (a fresh subagent per node, an independent verifier per close, a review on a cadence), and pause it to human-test, get a summary, or change the goal.",
+  "plugins": [
+    {
+      "name": "graph-engineering",
+      "source": "./",
+      "description": "Turn a goal into a task graph and run it unattended from one interactive session, with pause points for a human.",
+      "version": "0.1.2"
+    }
+  ]
+}

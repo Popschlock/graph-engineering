@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python",
+            "args": ["${CLAUDE_PLUGIN_ROOT}/hooks/session-start.py"],
+            "timeout": 5,
+            "statusMessage": "Graph Engineering: roadmaps in flight"
+          }
+        ]
+      }
+    ]
+  }
+}
