@@ -118,8 +118,11 @@ def validate(rm, next_md=None):
     if next_md and Path(next_md).is_file():
         first = Path(next_md).read_text(encoding="utf-8").split("\n", 1)[0]
         m = re.match(r"#\s*kickoff:\s*(\S+)", first); rid = {n.id for n in ready(rm)}
+        # the node next.md names is READY before dispatch and IN PROGRESS during it -- validate runs in
+        # both states (a revise or a review while a task agent holds the row), so both are the same "ok"
+        rid |= {n.id for n in rm.nodes if kind(n.status) == "in progress"}
         if not m: probs.append("next.md: first line is not '# kickoff: <id>'")
-        elif m.group(1) != "none" and m.group(1) not in rid: probs.append(f"next.md: {m.group(1)} is not a ready node")
+        elif m.group(1) != "none" and m.group(1) not in rid: probs.append(f"next.md: {m.group(1)} is not a ready or in-progress node")
     return probs
 
 def roadmap_state(r):
