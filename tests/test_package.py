@@ -28,7 +28,7 @@ def test_the_two_manifests_carry_the_same_version():
     plugin = json.loads(read(".claude-plugin/plugin.json"))
     market = json.loads(read(".claude-plugin/marketplace.json"))
     entries = [p for p in market["plugins"] if p["name"] == plugin["name"]]
-    assert len(entries) == 1 and entries[0]["version"] == plugin["version"] == "0.2.0"
+    assert len(entries) == 1 and entries[0]["version"] == plugin["version"] == "0.3.0"
 
 def test_claudeignore_names_the_caches_and_never_the_package():
     """A directory source is installed by copying the checkout. Whether the installer honours this file is

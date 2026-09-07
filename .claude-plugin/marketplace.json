@@ -7,7 +7,7 @@
       "name": "graph-engineering",
       "source": "./",
       "description": "Turn a goal into a task graph and run it unattended from one interactive session, with pause points for a human.",
-      "version": "0.2.0"
+      "version": "0.3.0"
     }
   ]
 }

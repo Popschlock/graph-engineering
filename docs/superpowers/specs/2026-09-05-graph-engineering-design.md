@@ -186,7 +186,12 @@ a header with the roadmap's state, a progress ring and per-state counts; a hold
 banner (`STOPPED` or `PAUSED: <reason> — <note>`, STOP winning over PAUSE,
 because a graph of green nodes that has quietly stopped dispatching looks exactly
 like one that is still running); the graph as an SVG laid out by dependency
-depth in phase bands, nodes coloured by state (open grey, ready blue, in progress
+depth in phase bands — the depth counted along dependencies INSIDE the phase, so
+every band starts at column 0 and a roadmap of many phases wraps instead of
+running off the page, a dependency into the next band drawn as an edge that
+dives and re-enters from the left — in a viewport that pans on a drag with any
+mouse button, zooms on the wheel about the cursor, fits on a double-click, and
+remembers its view in the browser; nodes coloured by state (open grey, ready blue, in progress
 amber, done green, blocked red, skipped hatched); a task list grouped by phase
 with filters, each row expanding to the node's details — an in-progress node
 shows its gate activity and kickoff, a done node its completion summary (the

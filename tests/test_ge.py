@@ -31,7 +31,7 @@ def test_validate_next_md_id(project):
     d = write_roadmap(project, "demo", ROWS3).parent
     (d / "next.md").write_text("# kickoff: C\n\nbody\n", encoding="utf-8")
     rm = ge.parse_roadmap(d / "roadmap.md")
-    assert any("C is not a ready node" in p for p in ge.validate(rm, d / "next.md"))
+    assert any("C is not a ready or in-progress node" in p for p in ge.validate(rm, d / "next.md"))
     assert ge.validate(rm) == []
 
 def test_cli_reads(project, capsys):
@@ -63,12 +63,12 @@ def test_start_close_block_ledger(project, capsys):
     n = ge.by_id(ge.load("demo"))["A"]
     assert n.status == "done abc1234" and n.commit == "abc1234" and n.spec == "docs/plan.md §1"
     row = ge.read_ledger("demo")[-1]
-    assert row[1:] == ["s1", "A", "done", "3 tests green", "abc1234"] and re.match(r"\d{4}-\d{2}-\d{2}$", row[0])
-    assert ge.main(["close", "demo", "A", "abc1234", "again"]) == 0 and len(ge.read_ledger("demo")) == 1
+    assert row[1:] == ["s1", "A", "done", "3 tests green", "abc1234"] and re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}$", row[0])
+    assert ge.main(["close", "demo", "A", "abc1234", "again"]) == 0 and len(ge.read_ledger("demo")) == 2  # started + done
     assert ge.main(["block", "demo", "B", "human call"]) == 0
     assert ge.by_id(ge.load("demo"))["B"].status == "blocked: human call"
     assert ge.main(["event", "demo", "review", "no change"]) == 0
-    assert [r[3] for r in ge.read_ledger("demo")] == ["done", "blocked", "review"]
+    assert [r[3] for r in ge.read_ledger("demo")] == ["started", "done", "blocked", "review"]
     capsys.readouterr(); ge.main(["ledger", "demo", "2"])
     assert capsys.readouterr().out.count("\n") == 2
 

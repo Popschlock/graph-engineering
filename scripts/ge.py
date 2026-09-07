@@ -4,7 +4,7 @@ Run from the project root (or with --root <dir>): python ge.py <command> [args].
 Exit 0 ok, 1 not found/invalid, 2 validation failure (reasons printed).
 Sections: 1 model+parse | 2 graph | 3 writers | 4 config+gate+guards+brief | 5 render | 6 pause+open | 7 cli
 """
-import argparse, datetime, glob, os, re, signal, subprocess, sys
+import argparse, datetime, glob, json, os, re, signal, subprocess, sys, time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -196,19 +196,29 @@ def init_roadmap(r, goal_text, subject=""):
 
 
 def today(): return datetime.date.today().isoformat()
+def now(): return datetime.datetime.now().strftime("%Y-%m-%d %H:%M")  # ledger rows: the page shows durations
 
 def append_ledger(r, task, event, outcome, commit="", session=""):
     p = rdir(r) / "ledger.md"
     if not p.is_file(): wtext(p, LEDGER_HEAD)
-    row = f"| {today()} | {esc_cell(session)} | {esc_cell(task)} | {esc_cell(event)} | {esc_cell(outcome)} | {esc_cell(commit)} |\n"
+    row = f"| {now()} | {esc_cell(session)} | {esc_cell(task)} | {esc_cell(event)} | {esc_cell(outcome)} | {esc_cell(commit)} |\n"
     with open(p, "a", encoding="utf-8", newline="\n") as f: f.write(row)
     return row.strip()
 
-def read_ledger(r, n=None):
+def read_ledger(r, n=None, started=True):
+    """Every row, oldest first, or the last n. `started` rows are one per dispatch: the `ledger` verb drops
+    them unless --all, so the windows the verifier, the reviewer and the runner read keep their meaning."""
     p = rdir(r) / "ledger.md"
     rows = ([cells(l) for l in p.read_text(encoding="utf-8").split("\n") if re.match(r"\|\s*\d{4}-\d{2}-\d{2}", l)]
             if p.is_file() else [])
+    if not started: rows = [x for x in rows if len(x) < 4 or x[3] != "started"]
     return rows[-n:] if n else rows
+
+def start(r, nid, session):
+    """status -> in progress (<session>); ledger `started`; render. The render is the 0.3 fix: without it the
+    page was rebuilt when a node turned green and never while it was amber."""
+    set_field(load(r), nid, "status", f"in progress ({session})"); append_ledger(r, nid, "started", session, "", session)
+    render_to_file(r)
 
 def close(r, nid, h, outcome, session=""):
     """status -> done <hash>, commit column, ledger row, render. -> "" on a first close, "already" when the
@@ -372,7 +382,7 @@ You are an unattended session of the project at `{root}`, working roadmap `{r}` 
 3. **Finish every edit, THEN run the long gates.** A gate is a name in `ge/config.md`; run each gate the row names with `ge.py gate {r} <name>` on the closing tree and keep the captures it prints for the commit message and your report. `NO MATCH` is not a close: fix and re-run, or block.
 4. **Guards.** First run `ge.py guards {r}`. `stop: PRESENT` means stop now and report `stopped`. A `guard <name>: BLOCKED` at any point means stop after writing `next.md` and report `blocked: guard <name>`; never clear a guard yourself. A `tree: UNKNOWN (...)` or `guard <name>: ERROR ...` line is a check that could not run, and it fails closed: it blocks exactly like `BLOCKED` — stop the same way and report `blocked: guard tree` for the tree line, `blocked: guard <name>` for a named guard.
 5. **Keep raw output out of your context**: `| tail`, `| grep`, background long commands and read their result line; reads that span many files go to a subagent whose short report you keep. Write-ups go to files, not to your report.
-6. **A dirty tree at start** (`git status --porcelain`): if every change is under `ge/`, it is the runner's marks (status.html, ledger rows, your row); continue — your close commit's `git add ge` carries them. Anything else is a cut-off session: finish what is finishable under its kickoff or `git stash` it with `ge.py event {r} revised "stashed: <what>"`, then take the task.
+6. **A dirty tree at start** (`git status --porcelain`): if every change is under `ge/`, it is the runner's marks (status.html, ledger rows, your row, ge/.gitignore); continue — your close commit's `git add ge` carries them. Anything else is a cut-off session: finish what is finishable under its kickoff or `git stash` it with `ge.py event {r} revised "stashed: <what>"`, then take the task.
 7. **Close, in this order:** (a) memory updated where a durable fact or a trap was found; (b) ONE work commit whose message quotes each gate's captures and ends with the session link you were given; (c) `ge.py close {r} {id} <hash> "<outcome>" --session <your session id>`, where `<outcome>` STARTS with one `<gate>=<captures>` token per gate the row names, separated by spaces, then `; ` and a one-line summary — `pytest=41 e2e=12; the close is idempotent now` — because the verifier reads those tokens back out of the ledger; (d) `ge.py next {r}`; write `ge/{r}/next.md` for that node: first line `# kickoff: <its id>` (or `# kickoff: none`), then a COMPLETE kickoff for a session that knows nothing — what to read, what to build, the pins or tests, its gate names, how to close; (e) `git add ge && git commit -m "ge({r}): close {id}; next <its id>"`.
 8. **Your report**, under 150 words, exactly: `commit: <work hash>`; one line per gate `gate <name>: <captures>`; `closed: {id}` or `blocked: <why>` or `stopped`; `next: <id>`. Audit each line against a tool result first; an unverified claim is written as unverified.
 """
@@ -398,6 +408,9 @@ def brief(r):
 # ---- 5. render --------------------------------------------------------------
 COLOURS = {"open": "#9aa0a6", "ready": "#3b82f6", "in progress": "#f59e0b", "done": "#22c55e",
            "blocked": "#ef4444", "skipped": "url(#hatch)"}
+TEMPLATE = Path(__file__).with_name("status_template.html")
+GITIGNORE = "# written by ge.py: the two files the live dashboard regenerates constantly\n*/status.js\n*/activity.log\n"
+ACTIVITY_TAIL = 60
 
 def esc(s): return str(s).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
 
@@ -418,9 +431,20 @@ def phase_of(rm, nid):
         if nid == pid or nid.startswith(pid + ".") or nid.startswith(pid + "-"): return pid
     return ""
 
+def depth_in_phase(rm):
+    """longest path from a root counting only deps in the SAME phase, per node id: each phase band starts at
+    column 0, so a roadmap of many phases wraps instead of running off the right of the page"""
+    ids, memo, ph = by_id(rm), {}, {n.id: phase_of(rm, n.id) for n in rm.nodes}
+    def d(i, seen=()):
+        if i in memo: return memo[i]
+        if i in seen: return 0
+        ds = [d(x, seen + (i,)) + 1 for x in ids[i].deps if x in ids and ph[x] == ph[i]]
+        memo[i] = max(ds) if ds else 0; return memo[i]
+    return {n.id: d(n.id) for n in rm.nodes}
+
 def layout(rm):
-    """columns by depth; rows by table order inside a phase band; bands in phase order, unphased nodes last"""
-    dep = depth(rm); order = [p[0] for p in rm.phases] + [""]; pos, bands, row = {}, [], 0
+    """columns by depth inside the phase; rows by table order inside a phase band; bands in phase order, unphased nodes last"""
+    dep = depth_in_phase(rm); order = [p[0] for p in rm.phases] + [""]; pos, bands, row = {}, [], 0
     for p in order:
         group = [n for n in rm.nodes if phase_of(rm, n.id) == p]
         if not group: continue
@@ -433,52 +457,107 @@ def layout(rm):
 def node_colour(n, ready_ids):
     return COLOURS["ready"] if n.id in ready_ids else COLOURS.get(kind(n.status), COLOURS["open"])
 
-def render(rm, cfg, ledger_rows, calls_open, hold=""):
-    pos, bands = layout(rm); rid = {n.id for n in ready(rm)}
-    CW, RH, W, H, X0, Y0 = 210, 46, 180, 34, 20, 30
-    ncols = max([c for c, _r in pos.values()], default=0) + 1; nrows = max([r for _c, r in pos.values()], default=0) + 1
-    width, height = X0 * 2 + ncols * CW, Y0 * 2 + nrows * RH
-    svg = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" font-family="system-ui,sans-serif" font-size="11">',
-           '<defs><marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker>',
-           '<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">'
-           '<rect width="6" height="6" fill="#ddd"/><line x1="0" y1="0" x2="0" y2="6" stroke="#777" stroke-width="2"/></pattern></defs>']
-    for i, (p, r0, r1) in enumerate(bands):
-        fill = "#f3f4f6" if i % 2 else "#fafafa"
-        svg.append(f'<rect x="4" y="{Y0 + r0 * RH - 8}" width="{width - 8}" height="{(r1 - r0) * RH}" fill="{fill}" stroke="#e5e7eb"/>')
-        svg.append(f'<text x="8" y="{Y0 + r0 * RH + 4}" fill="#666">{esc(p or "other")}</text>')
-    def xy(nid): c, r = pos[nid]; return X0 + c * CW, Y0 + r * RH
+def log_activity(r, line):
+    """activity.log: one timestamped line per gate event -- the only signal from inside a task's window"""
+    p = rdir(r) / "activity.log"; p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "a", encoding="utf-8", newline="\n") as f:
+        f.write(f"{datetime.datetime.now().isoformat(timespec='seconds')} {flatten(line)}\n")
+
+def read_activity(r, n=ACTIVITY_TAIL):
+    """-> [{ts, kind, name, state, detail, text}] for the last n lines; a gate line is
+    `<ts> gate <name> running` or `<ts> gate <name> MATCH|NO MATCH <detail>`"""
+    p = rdir(r) / "activity.log"
+    if not p.is_file(): return []
+    out = []
+    for l in p.read_text(encoding="utf-8", errors="replace").split("\n")[-n - 1:]:
+        if not l.strip(): continue
+        ts, _, rest = l.partition(" ")
+        m = re.match(r"gate (\S+) (running|MATCH|NO MATCH)\s*(.*)$", rest)
+        if m: out.append({"ts": ts, "kind": "gate", "name": m.group(1), "state": m.group(2), "detail": m.group(3).strip(), "text": rest})
+        else: out.append({"ts": ts, "kind": "note", "name": "", "state": "", "detail": rest, "text": rest})
+    return out
+
+def read_kickoff(r):
+    """-> (id, body) from next.md: the kickoff the runner dispatches next, or ("", "")"""
+    p = rdir(r) / "next.md"
+    if not p.is_file(): return "", ""
+    text = p.read_text(encoding="utf-8", errors="replace"); first, _, body = text.partition("\n")
+    m = re.match(r"#\s*kickoff:\s*(\S+)", first)
+    return (m.group(1), body.strip()) if m else ("", "")
+
+def parse_ts(s):
+    """'YYYY-MM-DD HH:MM' -> datetime; a date-only cell (a row older than 0.3) -> None: no duration from it"""
+    try: return datetime.datetime.strptime(s.strip(), "%Y-%m-%d %H:%M")
+    except ValueError: return None
+
+def split_outcome(outcome):
+    """'unit=3 e2e=12; prose' -> {gates: [{name, value}], text: 'prose'}: the close protocol of rule 7c"""
+    head, sep, text = outcome.partition("; ")
+    toks = head.split(); gates = []
+    for t in toks:
+        m = re.match(r"^([A-Za-z0-9._-]+)=(.*)$", t)
+        if m: gates.append({"name": m.group(1), "value": m.group(2)})
+        else: gates = []; break
+    if not gates: return {"gates": [], "text": outcome}
+    return {"gates": gates, "text": text.strip() if sep else ""}
+
+def status_data(rm, cfg, ledger_rows, calls_open, hold="", decided=(), activity=(), kickoff=("", "")):
+    """ONE JSON document of the roadmap: what the page draws, embedded in status.html and mirrored to status.js"""
+    pos, bands = layout(rm); rid = {n.id for n in ready(rm)}; ids = by_id(rm)
+    rows = [{"ts": x[0], "session": x[1], "task": x[2], "event": x[3], "outcome": x[4], "commit": x[5]}
+            for x in ledger_rows if len(x) > 5]
+    dependents = {n.id: [] for n in rm.nodes}
     for n in rm.nodes:
-        x, y = xy(n.id)
         for d in n.deps:
-            if d in pos:
-                dx, dy = xy(d)
-                svg.append(f'<line x1="{dx + W}" y1="{dy + H / 2}" x2="{x}" y2="{y + H / 2}" stroke="#555" marker-end="url(#arr)"/>')
+            if d in dependents: dependents[d].append(n.id)
+    nodes = []
     for n in rm.nodes:
-        x, y = xy(n.id); c = node_colour(n, rid); tc = "#000" if c in ("url(#hatch)", "#9aa0a6") else "#fff"
-        svg.append(f'<g><title>{esc(n.id)}: {esc(n.subject)} [{esc(n.status)}]</title><rect x="{x}" y="{y}" width="{W}" height="{H}" rx="4" fill="{c}"/>'
-                   f'<text x="{x + 6}" y="{y + 14}" fill="{tc}" font-weight="bold">{esc(n.id)}</text>'
-                   f'<text x="{x + 6}" y="{y + 27}" fill="{tc}">{esc(n.subject[:28])}</text></g>')
-    svg.append("</svg>")
-    last = next((x for x in reversed(ledger_rows) if len(x) > 4 and x[3] in ("done", "re-closed")), None)
-    last_txt = esc(" | ".join(last)) if last else "none yet"
-    tail = "".join("<tr>" + "".join(f"<td>{esc(c)}</td>" for c in x) + "</tr>" for x in ledger_rows[-20:])
-    calls = "".join(f"<li>{esc(c)}</li>" for c in calls_open) or "<li>none</li>"
-    gates = ", ".join(f"{esc(g.name)}: {esc(g.command)}" for g in cfg.gates.values()) or "none in ge/config.md"
-    legend = "".join(f'<span style="background:{v};color:{"#000" if k in ("open", "skipped") else "#fff"}">{k}</span>'
-                     for k, v in COLOURS.items() if k != "skipped") + '<span style="background:#ddd;color:#000">skipped</span>'
-    now = datetime.datetime.now().isoformat(timespec="seconds"); name = esc(rm.name); g = esc(goal(rm)); graph = "".join(svg)
-    # a graph of green nodes that has quietly stopped dispatching looks exactly like one still running
-    banner = (f'<p class="hold" style="background:{COLOURS["blocked"] if hold.startswith("STOPPED") else COLOURS["in progress"]}">'
-              f'{esc(hold)}</p>') if hold else ""
-    return ('<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="60">'
-            f'<title>ge: {name}</title><style>body{{font-family:system-ui,sans-serif;margin:20px;color:#222}}'
-            'table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #ddd;padding:3px 6px;text-align:left}'
-            '.legend span{display:inline-block;padding:2px 8px;margin-right:6px;border-radius:3px}pre{white-space:pre-wrap}'
-            '.hold{display:inline-block;padding:6px 12px;border-radius:4px;color:#fff;font-weight:bold}</style></head><body>'
-            f'<h1>{name}</h1>{banner}<p>generated {now} — refreshes every 60 s — gates: {gates}</p><h2>Goal</h2><pre>{g}</pre>'
-            f'<p class="legend">{legend}</p>{graph}<h2>Last close</h2><p>{last_txt}</p><h2>Open calls</h2><ul>{calls}</ul>'
-            '<h2>Ledger (last 20)</h2><table><tr><th>date</th><th>session</th><th>task</th><th>event</th><th>outcome</th><th>commit</th></tr>'
-            f'{tail}</table></body></html>')
+        k = kind(n.status); hist = [x for x in rows if x["task"] == n.id]
+        started = next((x["ts"] for x in reversed(hist) if x["event"] == "started"), "")
+        fin = next((x for x in reversed(hist) if x["event"] in ("done", "re-closed", "blocked")), None)
+        finished = fin["ts"] if fin and k in ("done", "blocked") else ""
+        t0, t1 = parse_ts(started), parse_ts(finished)
+        if k == "in progress" and t0: t1 = datetime.datetime.now()
+        minutes = int((t1 - t0).total_seconds() // 60) if t0 and t1 and t1 >= t0 else None
+        m = re.match(r"in progress \((.*)\)", n.status)
+        done_row = next((x for x in reversed(hist) if x["event"] in ("done", "re-closed")), None)
+        c, rw = pos.get(n.id, (0, 0))
+        reason = n.status.split(": ", 1)[1] if k in ("blocked", "skipped") and ": " in n.status else ""
+        nodes.append({"id": n.id, "subject": n.subject, "status": n.status, "kind": k, "ready": n.id in rid,
+                      "deps": n.deps, "dependents": dependents[n.id], "spec": n.spec, "gates": n.gate, "commit": n.commit,
+                      "phase": phase_of(rm, n.id), "col": c, "row": rw, "session": m.group(1) if m else "",
+                      "reason": reason, "started": started, "finished": finished, "minutes": minutes, "history": hist,
+                      "summary": split_outcome(done_row["outcome"]) if done_row and k == "done" else None,
+                      "kickoff": kickoff[1] if kickoff[0] == n.id else ""})
+    counts = {k: 0 for k in ("open", "ready", "in progress", "done", "blocked", "skipped")}
+    for x in nodes: counts["ready" if x["ready"] else x["kind"]] = counts.get("ready" if x["ready"] else x["kind"], 0) + 1
+    ip = [x["id"] for x in nodes if x["kind"] == "in progress"]
+    if hold.startswith("STOPPED"): hk, state = "stopped", "stopped"
+    elif hold.startswith("PAUSED"): hk, state = "paused", "paused: " + hold[8:].split(" — ", 1)[0]
+    else: hk, state = None, (f"in progress ({', '.join(ip)})" if ip else "idle")
+    reason, _, note = hold[8:].partition(" — ") if hk == "paused" else ("", "", "")
+    return {"version": 1, "name": rm.name, "subject": (rm.lines[0].split("—", 1)[1].strip() if rm.lines and "—" in rm.lines[0] else ""),
+            "goal": goal(rm), "generated": datetime.datetime.now().isoformat(timespec="seconds"), "project": Path.cwd().name,
+            "state": state, "hold": {"kind": hk, "reason": reason, "note": note, "text": hold} if hk else None,
+            "counts": counts, "total": len(nodes), "review_every": cfg.review_every,
+            "gates": [{"name": g.name, "command": g.command, "success": g.success, "artifact": g.artifact, "floor": g.floor}
+                      for g in cfg.gates.values()],
+            "phases": [{"id": pid, "title": t, "text": x} for pid, t, x in rm.phases],
+            "bands": [{"phase": p, "r0": r0, "r1": r1} for p, r0, r1 in bands], "nodes": nodes, "ledger": rows,
+            "calls": {"open": list(calls_open), "decided": list(decided)}, "activity": list(activity), "colours": COLOURS}
+
+def json_for_html(data):
+    # `<` as \u003c: a `</script>` inside a subject would otherwise end the data block early
+    return json.dumps(data, ensure_ascii=False).replace("<", "\\u003c")
+
+def render(rm, cfg, ledger_rows, calls_open, hold="", data=None, **kw):
+    """-> the page. Pass `data` (from status_data) to skip rebuilding it; **kw go to status_data otherwise."""
+    data = data or status_data(rm, cfg, ledger_rows, calls_open, hold, **kw)
+    tmpl = TEMPLATE.read_text(encoding="utf-8")
+    assert "/*__GE_DATA__*/" in tmpl, "status_template.html lost its data placeholder"
+    return tmpl.replace("/*__GE_DATA__*/", json_for_html(data), 1).replace("__GE_TITLE__", esc(rm.name), 1)
+
+def render_js(data): return "geUpdate(" + json.dumps(data, ensure_ascii=False) + ");\n"
 
 def hold_line(r):
     """-> the banner status.html draws for a held roadmap, or "". STOP wins over PAUSE: a stopped roadmap
@@ -487,10 +566,27 @@ def hold_line(r):
     ps = pause_state(r)
     return ("PAUSED: " + ps[0] + (" — " + ps[1] if ps[1] else "")) if ps else ""
 
+def atomic_write(p, text):
+    """temp + rename, so a page polling the file never reads it half-written; a browser or an antivirus holding
+    the target on Windows raises PermissionError from the rename -- retry briefly, then write in place."""
+    p = Path(p); tmp = p.with_name(p.name + ".tmp"); wtext(tmp, text)
+    for i in range(5):
+        try: os.replace(tmp, p); return
+        except PermissionError: time.sleep(0.05 * (i + 1))
+    wtext(p, text)
+    try: tmp.unlink()
+    except OSError: pass
+
 def render_to_file(r):
-    rm = load(r)
-    html = render(rm, parse_config(ge_root() / "config.md"), read_ledger(r), read_calls(r)[0], hold_line(r))
-    wtext(rdir(r) / "status.html", html); return rdir(r) / "status.html"
+    """status.html + status.js, and ge/.gitignore for the two generated files where it is absent"""
+    rm = load(r); op, dec = read_calls(r)
+    data = status_data(rm, parse_config(ge_root() / "config.md"), read_ledger(r), op, hold_line(r),
+                       decided=dec, activity=read_activity(r), kickoff=read_kickoff(r))
+    html = render(rm, None, None, None, data=data)
+    gi = ge_root() / ".gitignore"
+    if not gi.exists(): wtext(gi, GITIGNORE)
+    atomic_write(rdir(r) / "status.js", render_js(data))
+    atomic_write(rdir(r) / "status.html", html); return rdir(r) / "status.html"
 
 # ---- 6. pause + open --------------------------------------------------------
 def pause(r, reason, note=""):
@@ -499,6 +595,7 @@ def pause(r, reason, note=""):
     REASON is worse — it truncates the reason and pushes the note onto a line nobody wrote. Both are flattened."""
     reason, note = flatten(reason), flatten(note)
     wtext(rdir(r) / "PAUSE", reason + ("\n" + note if note else "") + "\n"); append_ledger(r, "-", "paused " + reason, note)
+    render_to_file(r)
 
 def resume(r):
     """-> the files removed. A roadmap that was not paused or stopped gets no ledger row:
@@ -508,9 +605,9 @@ def resume(r):
         p = rdir(r) / f
         if p.exists(): p.unlink(); gone.append(f)
     if gone: append_ledger(r, "-", "resumed", "")
-    return gone
+    render_to_file(r); return gone
 
-def stop(r): wtext(rdir(r) / "STOP", today() + "\n")
+def stop(r): wtext(rdir(r) / "STOP", today() + "\n"); render_to_file(r)
 
 def open_command(path, platform=sys.platform):
     if platform.startswith("win"): return ["cmd", "/c", "start", "", str(path)]
@@ -538,7 +635,7 @@ def main(argv=None):
     sub("list"); sub("validate", "r"); sub("ready", "r"); sub("next", "r"); sub("node", "r", "id"); sub("render", "r")
     sub("start", "r", "id", "session"); sub("close", "r", "id", "hash", "outcome", session="")
     sub("block", "r", "id", "why", session=""); sub("event", "r", "event", "outcome", session="")
-    sub("ledger", "r").add_argument("n", nargs="?", type=int, default=3)
+    lg = sub("ledger", "r"); lg.add_argument("n", nargs="?", type=int, default=3); lg.add_argument("--all", action="store_true")
     sub("init", "r", goal="", subject=""); sub("add", "r", id="", subject="", deps="", spec="", gate="", after=None)
     sub("set", "r", "id", status=None, deps=None, spec=None, gate=None, subject=None)
     sub("gate", "r", "name"); sub("guards", "r"); sub("brief", "r")
@@ -586,17 +683,18 @@ def dispatch(a):
         for k in ("id", "subject", "status", "deps", "spec", "gate", "commit"):
             v = getattr(n, k); print(f"{k}: {', '.join(v) if isinstance(v, list) else v}")
         return 0
-    if c == "start": set_field(rm, a.id, "status", f"in progress ({a.session})"); print(f"{a.id}: in progress ({a.session})"); return 0
+    if c == "start": start(a.r, a.id, a.session); print(f"{a.id}: in progress ({a.session})"); return 0
     if c == "close":
         state = close(a.r, a.id, a.hash, a.outcome, a.session); print(f"{a.id}: {state + ' ' if state else ''}done {a.hash}"); return 0
     if c == "block": block(a.r, a.id, a.why, a.session); print(f"{a.id}: blocked: {a.why}"); return 0
-    if c == "event": print(append_ledger(a.r, "-", a.event, a.outcome, "", a.session)); return 0
+    if c == "event": print(append_ledger(a.r, "-", a.event, a.outcome, "", a.session)); render_to_file(a.r); return 0
     if c == "ledger":
-        for row in read_ledger(a.r, a.n): print("| " + " | ".join(row) + " |")
+        for row in read_ledger(a.r, a.n, started=a.all): print("| " + " | ".join(row) + " |")
         return 0
     if c == "add":
         if not a.id or not a.subject: print("--id and --subject are required", file=sys.stderr); return 1
-        add_node(rm, Node(a.id, a.subject, "open", split_list(a.deps), a.spec, split_list(a.gate), ""), a.after); print(f"added {a.id}"); return 0
+        add_node(rm, Node(a.id, a.subject, "open", split_list(a.deps), a.spec, split_list(a.gate), ""), a.after); print(f"added {a.id}")
+        render_to_file(a.r); return 0
     if c == "set":
         if a.status is not None and kind(a.status) == "bad":  # a status no reader knows makes the node
             print(f"bad status {a.status!r}; accepted: open | in progress (<session>) | done <hash> | "  # neither ready nor done
@@ -605,15 +703,19 @@ def dispatch(a):
         for k in ("status", "deps", "spec", "gate", "subject"):
             v = getattr(a, k)
             if v is not None: set_field(rm, a.id, k, v); print(f"{a.id}.{k} = {v}")
-        return 0
+        render_to_file(a.r); return 0
     if c == "render": print(render_to_file(a.r)); return 0
     if c == "gate":
         g = parse_config(ge_root() / "config.md").gates.get(a.name)
         if not g: print(f"no gate named {a.name} in ge/config.md", file=sys.stderr); return 1
+        log_activity(a.r, f"gate {a.name} running"); render_to_file(a.r)  # the page shows the gate while it runs
         try: ok, caps, src, text, why = run_gate(g)
-        except re.error as e: print(f"NO MATCH {a.name}: bad regex {e}"); return 1
+        except re.error as e:
+            log_activity(a.r, f"gate {a.name} NO MATCH bad regex {e}"); render_to_file(a.r)
+            print(f"NO MATCH {a.name}: bad regex {e}"); return 1
         caught = " ".join(x or "" for x in caps).strip()  # a non-participating group is None, not a string
         detail = " — ".join(x for x in (caught, why) if x)  # why names a floor or a timeout, which no miss can
+        log_activity(a.r, f"gate {a.name} {'MATCH' if ok else 'NO MATCH'} {detail}"); render_to_file(a.r)
         print(f"{'MATCH' if ok else 'NO MATCH'} {a.name}: {detail} ({src})".replace(":  (", ": ("))
         if not ok and text.strip():  # the evidence, so an unattended agent need not re-run a long command
             for line in text.splitlines()[-5:]: print("  " + line)
