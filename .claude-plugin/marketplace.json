@@ -9,7 +9,7 @@
       "name": "graph-engineering",
       "source": "./",
       "description": "Turn a goal into an ordered list of tasks, let one Claude session work through them unattended with a second subagent checking each one, and watch it on a live page.",
-      "version": "0.3.2"
+      "version": "0.3.3"
     }
   ]
 }

@@ -1,18 +1,18 @@
 # Graph Engineering
 
-Graph Engineering (GE) is a plugin that supports long-running, large projects, without drifting from your original goal or getting lost. This works on subscription plans and keeps the main orchestrator context very small via task statuses only, so it can run for many days straight without auto-compacting context or getting lost.
+Graph Engineering (GE) is a Claude Code plugin for long-running, large projects. It keeps a run on your original goal over many days without drifting or getting lost, and it works on a subscription plan: the orchestrating session holds only task statuses, so its context stays small and never needs to auto-compact.
 
-The GE plugin turns a stated goal into an ordered list of tasks that get implemented and validated by subagents. The subagents leave completion notes which get periodically reviewed, and the task roadmap automatically updates based on subagent notes as gaps are identified. Any conflicts with the stated goal get raised for human feedback. You can monitor implementation progress from an auto-updating local status page.
+GE turns a stated goal into an ordered list of tasks, and subagents implement and validate them one at a time. Each subagent leaves a completion note, a reviewer reads those notes every few tasks, and the roadmap updates itself as gaps are found. Anything that conflicts with the stated goal is raised as a question for you. You can watch the whole run on a local status page that updates on its own.
 
 ![The status page: a roadmap in progress, with one task amber](docs/dashboard.png)
 
 ## What it does
 
-You describe your goal in your own words using /ge-build-roadmap. The plugin turns your goal into a table of tasks, dependencies, specs, and validation checks. You then start the roadmap implementation using /ge-run-roadmap and monitor the progress from the status.html file within your project's ge/ folder.
+You describe your goal in your own words with `/ge-build-roadmap`. The plugin turns that goal into a table of tasks, each with its dependencies, its spec, and the validation check that proves it done. You then start the implementation with `/ge-run-roadmap` and follow the progress in `ge/<name>/status.html` inside your project.
 
-Every few tasks a reviewer reads the whole roadmap, and if needed, proposes changes. Anything requiring a human decision that may cause the roadmap to vary from the stated goal gets written down as a question, the task gets parked, and the runner moves on. You can come back when you like to answer the questions and unblock any tasks that were blocked.
+Every few tasks a reviewer reads the whole roadmap and proposes changes if it finds gaps. Any decision that needs a human, because it could move the roadmap away from the stated goal, is written down as a question. That task is parked and the runner moves on to the next one. You can come back whenever you like, answer the questions, and the parked tasks unblock.
 
-If at any point you want to adjust the roadmap or goals, you can use /ge-revise-roadmap and provide commentary on how your goal has changed or the roadmap should change. If you want to pause or resume a roadmap, you can use /ge-pause-roadmap or /ge-resume-roadmap. If you have multiple roadmaps built and running at once, you can add an identifier after any of the commands such as "/ge-build-roadmap MySuperFeature" and then "/ge-run-roadmap MySuperFeature".
+If at any point your goal changes or the roadmap needs a different shape, run `/ge-revise-roadmap` and say what has changed. `/ge-pause-roadmap` and `/ge-resume-roadmap` stop and restart a run. Every command takes the roadmap's name, so you can build and run several at once: `/ge-build-roadmap MySuperFeature` creates one, and `/ge-run-roadmap MySuperFeature` runs it.
 
 ## Getting Started
 
