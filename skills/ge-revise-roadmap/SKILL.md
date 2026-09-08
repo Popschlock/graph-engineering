@@ -1,6 +1,6 @@
 ---
 name: ge-revise-roadmap
-description: Change a Graph Engineering roadmap with the human - the goal, nodes added or skipped, dependencies, specs, gates, decided calls - validated and recorded. Use when the user types /ge-revise-roadmap <r>, or from a pause with reason adjust.
+description: Change a roadmap with the user: the goal, tasks added or dropped, the order, specs, checks, and decisions made. Checks the result and records the change. Use when the user types /ge-revise-roadmap <r>, or from a pause with reason adjust.
 ---
 
 # /ge-revise-roadmap <r>

@@ -1,6 +1,6 @@
 ---
 name: ge-verifier
-description: Maker-never-grader for a Graph Engineering node just closed by ge-task. Given only the roadmap, the node id, the work commit hash, the gate names and the ge.py path, it checks the artifacts (ge.py gate per name, git log and status, next.md's first line, the ledger row) and reports PASS or named misses. Never reads the maker's report; never edits.
+description: 'Checks a task another subagent just closed, without reading that subagent''s report. Given the roadmap, the task id, the commit hash, the check names and the ge.py path, it runs each check, reads git log and status, the next brief''s first line and the log row, and reports PASS or the misses by name. Edits nothing.'
 model: opus
 effort: xhigh
 color: green

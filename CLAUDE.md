@@ -5,7 +5,7 @@ Turn a goal into a task graph, run it unattended from ONE interactive session
 cadence), and let the human pause it to human-test, get a summary, or change the
 goal. Files in the project's git; any project, any gate.
 
-The spec is `docs/superpowers/specs/2026-09-05-graph-engineering-design.md` and
+The spec is `docs/design.md` and
 it is the contract: the file formats in §2, the `scripts/ge.py` CLI in §3, the
 skills in §4, the runner in §5. Change the spec before changing the behaviour.
 

@@ -1,4 +1,8 @@
-# Graph Engineering — design spec (v0.3)
+# Graph Engineering, the design (v0.3)
+
+This is the contract behind the plugin, for people changing it. It names every file the plugin writes and what each line in them means, every verb of `scripts/ge.py`, what each slash command does step by step, and how the unattended runner decides what to do next. If you only want to use the plugin, the README is enough. If you want to change how it behaves, change this file first, then the code, then the tests.
+
+The numbered sections below are the spec as it was approved on 2026-09-05 and amended for 0.2 and 0.3.
 
 Approved by the owner 2026-09-05. A first, project-specific version of this idea
 (a `/run-roadmap` skill and four bespoke agents, written for a single private

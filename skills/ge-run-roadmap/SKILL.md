@@ -1,6 +1,6 @@
 ---
 name: ge-run-roadmap
-description: Run a Graph Engineering roadmap unattended from ONE interactive session - dispatch each ready node's brief to a fresh ge-task (or ge-reader) subagent, verify each close with a fresh ge-verifier, review on the config cadence with ge-reviewer, honour PAUSE and STOP, and loop until a stop. Use when the user types /ge-run-roadmap <r> [once|dry|--until <id>].
+description: Run a roadmap unattended from one interactive session. Each ready task goes to a fresh worker subagent, each finished task is checked by a fresh verifier subagent, a reviewer looks at the whole roadmap every few tasks, and the loop stops on a pause, a stop, or when nothing is ready. Use when the user types /ge-run-roadmap <r> [once|dry|--until <id>].
 ---
 
 # /ge-run-roadmap <r> [once | dry | --until <id>]

@@ -1,6 +1,6 @@
 ---
 name: ge-stop-roadmap
-description: Hard-stop a Graph Engineering roadmap - writes STOP so the runner stops dispatching at its next boundary. Use when the user types /ge-stop-roadmap <r>.
+description: Stop a roadmap. Writes a STOP file so the runner dispatches nothing more after the current task. Use when the user types /ge-stop-roadmap <r>.
 ---
 
 # /ge-stop-roadmap <r>

@@ -151,17 +151,17 @@ input.search { background: var(--surface); border: 1px solid var(--line2); color
 .row { border-bottom: 1px solid var(--line); scroll-margin-top: 64px; }
 .row-h { display: grid; grid-template-columns: 18px 76px 1fr auto 20px; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 9px 4px; border-radius: 6px; }
 .row-h:hover { background: var(--bg2); }
-.row.open .row-h { background: var(--bg2); }
+.row.expanded .row-h { background: var(--bg2); }
 .row-h .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); justify-self: center; }
 .row-h .dot.skipped { background: repeating-linear-gradient(45deg, var(--skipped) 0 2px, transparent 2px 4px); }
 .row-h .dot.prog { box-shadow: 0 0 0 3px color-mix(in srgb, var(--prog) 30%, transparent); }
 .row-h .rid { font-family: var(--mono); font-weight: 600; font-size: 12.5px; }
 .row-h .rsub { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row.open .row-h .rsub { white-space: normal; }
+.row.expanded .row-h .rsub { white-space: normal; }
 .row-h .rmeta { color: var(--muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .row-h .rmeta .st { color: var(--c); font-weight: 600; }
 .row-h .chev { width: 16px; height: 16px; color: var(--faint); transition: transform .18s; }
-.row.open .chev { transform: rotate(180deg); }
+.row.expanded .chev { transform: rotate(180deg); }
 .row.flash .row-h { animation: rowflash 1.4s ease-out 1; }
 @keyframes rowflash { 0% { background: color-mix(in srgb, var(--c) 30%, transparent); } 100% { background: var(--bg2); } }
 @media (max-width: 720px) { .row-h { grid-template-columns: 14px 60px 1fr 20px; } .row-h .rmeta { display: none; } }
@@ -392,6 +392,7 @@ footer { padding: 18px 0 40px; color: var(--faint); font-size: 12.5px; display: 
     s += '<div class="hud"><button data-zoom="-1" title="Zoom out">−</button><span class="k" id="zoomk"></span><button data-zoom="1" title="Zoom in">+</button></div>';
     s += '<div class="help">drag to pan · wheel to zoom · double-click to fit</div>';
     var g = $("#graph"), first = !view; g.innerHTML = s;
+    if (first && !g.style.height) g.style.height = Math.min(560, Math.max(220, graphSize[1] + 24)) + "px";  // a small roadmap gets a small window
     if (first) { var saved = store.get("view:" + data.name, null); view = saved && saved.k ? saved : null;
       if (!view) { var ipn = data.nodes.filter(function (n) { return n.kind === "in progress"; })[0]; if (ipn) centerOn(ipn.id, 1); else fitAll(); } }
     applyView();
@@ -498,7 +499,7 @@ footer { padding: 18px 0 40px; color: var(--faint); font-size: 12.5px; display: 
       html += '<div class="phase"><div class="phase-h"><span class="pid">' + h(g.id || "other") + '</span><span class="pt">' + h(g.title) + '</span><span class="pc">' + dn + " / " + g.nodes.length + " done</span></div>";
       vis.forEach(function (n) {
         var st = stateOf(n), open = expanded.has(n.id);
-        html += '<div class="row ' + st + (open ? " open" : "") + (prev && prev[n.id] && prev[n.id] !== st ? " flash" : "") + '" id="row-' + h(n.id) + '" style="--c:var(--' + st + ')">' +
+        html += '<div class="row ' + st + (open ? " expanded" : "") + (prev && prev[n.id] && prev[n.id] !== st ? " flash" : "") + '" id="row-' + h(n.id) + '" style="--c:var(--' + st + ')">' +
           '<button class="row-h" data-toggle="' + h(n.id) + '" aria-expanded="' + open + '"><span class="dot ' + st + '"></span><span class="rid">' + h(n.id) + '</span><span class="rsub">' + h(n.subject) + '</span><span class="rmeta">' + rowMeta(n) + "</span>" +
           '<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6l5 5 5-5"/></svg></button>' + (open ? detail(n) : "") + "</div>";
       });

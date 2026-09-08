@@ -1,6 +1,6 @@
 ---
 name: ge-review-roadmap
-description: Dispatch the Graph Engineering reviewer on a roadmap now, show its proposal, and apply it on the human's word. Use when the user types /ge-review-roadmap <r>.
+description: Ask the reviewer to look at a roadmap now, show what it proposes (reordering, tasks to redo, decisions for the user), and apply it if the user agrees. Use when the user types /ge-review-roadmap <r>.
 ---
 
 # /ge-review-roadmap <r>

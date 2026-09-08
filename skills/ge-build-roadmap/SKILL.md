@@ -1,6 +1,6 @@
 ---
 name: ge-build-roadmap
-description: Build a Graph Engineering roadmap with the human - the goal in their words, phases, tasks with deps, spec and gate - or convert an existing plan with --from. Creates ge/config.md when missing. Use when the user types /ge-build-roadmap <r> [goal | --from <plan.md>].
+description: Turn a goal into a roadmap with the user: their words for the goal, then the tasks in order, each with what it depends on, where its spec is, and the check that proves it done. Can also convert a plan file with --from. Writes ge/config.md if the project has none. Use when the user types /ge-build-roadmap <r> [goal | --from <plan.md>].
 ---
 
 # /ge-build-roadmap <r> [<goal> | --from <plan.md>]

@@ -1,6 +1,6 @@
 ---
 name: ge-reader
-description: 'Reads before anything is built - a READ: node of a Graph Engineering roadmap (settle a mechanism, write a findings file or a plan section) or a pause summary over the ledger and recent commits. Dispatched by /ge-run-roadmap; returns findings with file:line, never edits code.'
+description: 'Reads before anything is built. Takes a READ: task from a roadmap (settle how something works, write up findings or a plan section) or writes a pause summary from the log and recent commits. Dispatched by /ge-run-roadmap. Returns findings with file:line and edits no code.'
 model: fable
 effort: high
 memory: project

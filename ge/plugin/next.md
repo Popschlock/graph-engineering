@@ -7,7 +7,7 @@ and stop. That is the correct state, not a fault.
 ## Where the plugin got to
 
 `0.2-polish` closed at `b49fb18` with `pytest=62`, and the tree is **Graph Engineering
-0.2.0**. `docs/superpowers/specs/2026-09-05-graph-engineering-design.md` is the
+0.2.0**. `docs/design.md` is the
 contract and its **section 12** lists the nine changes 0.2 made, each with the section
 it lives in and each pinned by a test in `tests/`. Read that section before touching
 anything; the two worth knowing without reading are:

@@ -1,6 +1,6 @@
 ---
 name: ge-resume-roadmap
-description: Resume a paused or stopped Graph Engineering roadmap - decide open calls with the human, remove PAUSE and STOP, ledger resumed. Use when the user types /ge-resume-roadmap <r>.
+description: Resume a paused or stopped roadmap. Settles any decisions waiting on the user first, then clears the pause and records it. Use when the user types /ge-resume-roadmap <r>.
 ---
 
 # /ge-resume-roadmap <r>

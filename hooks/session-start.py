@@ -29,7 +29,12 @@ def main():
             print(f"ge: could not read roadmap {name} ({e})")
             continue
         if state == "idle" and calls == 0: continue
-        print(f"ge: roadmap {name} is {state}, {done}/{total} done, {calls} open call(s) — /ge-status {name}")
+        if state.startswith("in progress ("): what = "is working on " + state[len("in progress ("):-1]
+        elif state.startswith("paused: "): what = "is paused (" + state[len("paused: "):] + ")"
+        elif state == "stopped": what = "is stopped"
+        else: what = "is idle"
+        waiting = f", {calls} decision{'s' if calls != 1 else ''} waiting for you" if calls else ""
+        print(f"ge: {name} {what}, {done} of {total} tasks done{waiting}. /ge-status {name}")
     return 0
 
 if __name__ == "__main__":

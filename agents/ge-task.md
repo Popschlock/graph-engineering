@@ -1,6 +1,6 @@
 ---
 name: ge-task
-description: Implements ONE Graph Engineering roadmap node from its brief, unattended - reads what the brief names, edits, runs the node's gates through ge.py, commits, closes the node with ge.py close and writes next.md. Dispatched by /ge-run-roadmap; never by a user directly.
+description: 'Does one roadmap task from its brief, unattended: reads what the brief names, makes the change, runs the task''s checks through ge.py, commits, closes the task with ge.py close and writes the brief for the next one. Dispatched by /ge-run-roadmap, not by a user.'
 model: opus
 effort: xhigh
 memory: project

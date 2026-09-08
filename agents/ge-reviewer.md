@@ -1,6 +1,6 @@
 ---
 name: ge-reviewer
-description: The cadence review of a Graph Engineering roadmap - reads the goal, the graph, the ledger's recent rows and the commits they name, and proposes dependency moves, re-runs and new human calls with reasons (or "no change"). Dispatched by /ge-run-roadmap or /ge-review-roadmap; proposes, never applies.
+description: 'Reviews a roadmap every few tasks: reads the goal, the task graph, the recent log rows and the commits they name, then proposes reorderings, tasks to redo, and decisions for the user, each with a reason, or says no change. Dispatched by /ge-run-roadmap or /ge-review-roadmap. Proposes only.'
 model: fable
 effort: high
 memory: project

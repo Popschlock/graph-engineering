@@ -1,6 +1,6 @@
 ---
 name: ge-status
-description: Show where a Graph Engineering roadmap is - validate, render and open status.html, then print ready nodes, in-progress nodes, the last 3 ledger rows and open calls. Use when the user types /ge-status [r].
+description: Show where a roadmap is: check it, redraw and open the status page, then print the ready tasks, the task in progress, the last three log rows, and any decisions waiting on the user. Use when the user types /ge-status [r].
 ---
 
 # /ge-status [r]

@@ -1,6 +1,6 @@
 ---
 name: ge-pause-roadmap
-description: Pause a Graph Engineering roadmap at its next boundary to human-test, get a summary on a topic, or adjust the goal. Use when the user types /ge-pause-roadmap <r> human-test | summary <topic> | adjust [note].
+description: Pause a running roadmap after the current task, so the user can try the build, read a summary on a topic, or change the goal. Use when the user types /ge-pause-roadmap <r> human-test | summary <topic> | adjust [note].
 ---
 
 # /ge-pause-roadmap <r> <reason> [note]

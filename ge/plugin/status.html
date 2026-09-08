@@ -1,1 +1,601 @@
-<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="60"><title>ge: plugin</title><style>body{font-family:system-ui,sans-serif;margin:20px;color:#222}table{border-collapse:collapse;font-size:12px}td,th{border:1px solid #ddd;padding:3px 6px;text-align:left}.legend span{display:inline-block;padding:2px 8px;margin-right:6px;border-radius:3px}pre{white-space:pre-wrap}.hold{display:inline-block;padding:6px 12px;border-radius:4px;color:#fff;font-weight:bold}</style></head><body><h1>plugin</h1><p>generated 2026-09-06T11:11:47 — refreshes every 60 s — gates: pytest: python -m pytest tests/ -q</p><h2>Goal</h2><pre>A goal becomes a task graph; one interactive session runs the graph unattended by dispatching a fresh subagent per node with an independent verifier per close; the human pauses it to test, get a summary, or change the goal. Everything is files in the project's git. Any project, any gate. (Spec `docs/superpowers/specs/2026-09-05-graph-engineering-design.md`.)</pre><p class="legend"><span style="background:#9aa0a6;color:#000">open</span><span style="background:#3b82f6;color:#fff">ready</span><span style="background:#f59e0b;color:#fff">in progress</span><span style="background:#22c55e;color:#fff">done</span><span style="background:#ef4444;color:#fff">blocked</span><span style="background:#ddd;color:#000">skipped</span></p><svg xmlns="http://www.w3.org/2000/svg" width="460" height="152" font-family="system-ui,sans-serif" font-size="11"><defs><marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#555"/></marker><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#ddd"/><line x1="0" y1="0" x2="0" y2="6" stroke="#777" stroke-width="2"/></pattern></defs><rect x="4" y="22" width="452" height="46" fill="#fafafa" stroke="#e5e7eb"/><text x="8" y="34" fill="#666">M</text><rect x="4" y="68" width="452" height="46" fill="#f3f4f6" stroke="#e5e7eb"/><text x="8" y="80" fill="#666">other</text><line x1="200" y1="47.0" x2="230" y2="47.0" stroke="#555" marker-end="url(#arr)"/><line x1="200" y1="47.0" x2="230" y2="93.0" stroke="#555" marker-end="url(#arr)"/><g><title>T12: the first external project migration (anonymised) [done 96e0322]</title><rect x="20" y="30" width="180" height="34" rx="4" fill="#22c55e"/><text x="26" y="44" fill="#fff" font-weight="bold">T12</text><text x="26" y="57" fill="#fff">the first external project m</text></g><g><title>publish: push 0.1.2 to Popschlock/graph-engineering (public) [done b5b9c5c]</title><rect x="230" y="30" width="180" height="34" rx="4" fill="#22c55e"/><text x="236" y="44" fill="#fff" font-weight="bold">publish</text><text x="236" y="57" fill="#fff">push 0.1.2 to Popschlock/gra</text></g><g><title>0.2-polish: 0.2 polish: hook launcher python3/python; a floor column on gates; init --subject; PAUSE/STOP drawn in status.html; run_cmd timeout; pause reason newline; a second done row for a re-closed node; revise/build told about next's stderr lines; a directory-install .claudeignore [done b49fb18]</title><rect x="230" y="76" width="180" height="34" rx="4" fill="#22c55e"/><text x="236" y="90" fill="#fff" font-weight="bold">0.2-polish</text><text x="236" y="103" fill="#fff">0.2 polish: hook launcher py</text></g></svg><h2>Last close</h2><p>2026-09-06 | d1536b08 | 0.2-polish | done | pytest=62; the nine 0.1.2 review minors and 0.2.0 -- a gate floor ratchet, a process-tree timeout that actually bounds the clock, re-closed instead of a second done row, a STOP/PAUSE banner, init --subject, the python3/python hook, a flattened pause reason, .claudeignore, and build/revise told about next's stderr | b49fb18</p><h2>Open calls</h2><ul><li>Push 0.2.0 to GitHub (`main`, plus a `v0.2.0` tag)? — FOR: 0.1.2 is what installs from GitHub today, so the nine fixes reach nobody until it is pushed; the tree is clean, the gate is green at 62, and the version bump is what makes the plugin cache pick the new code up at all. AGAINST: nothing is waiting on it, and the hook's `python3` fallback could only be exercised here on a box that has `python` and no `python3`, so the `python3`-present branch is reasoned rather than run.</li></ul><h2>Ledger (last 20)</h2><table><tr><th>date</th><th>session</th><th>task</th><th>event</th><th>outcome</th><th>commit</th></tr><tr><td>2026-09-05</td><td>-</td><td>T12</td><td>done</td><td>pytest 35 passed; the external project's roadmap validates</td><td>96e0322</td></tr><tr><td>2026-09-06</td><td>d1536b08</td><td>publish</td><td>done</td><td>pytest=45; https://github.com/Popschlock/graph-engineering public, main only (e71b372 + this); history branch kept local</td><td>b5b9c5c</td></tr><tr><td>2026-09-06</td><td>d1536b08</td><td>0.2-polish</td><td>done</td><td>pytest=62; the nine 0.1.2 review minors and 0.2.0 -- a gate floor ratchet, a process-tree timeout that actually bounds the clock, re-closed instead of a second done row, a STOP/PAUSE banner, init --subject, the python3/python hook, a flattened pause reason, .claudeignore, and build/revise told about next's stderr</td><td>b49fb18</td></tr><tr><td>2026-09-06</td><td></td><td>-</td><td>review</td><td>REVIEW: no change; next none</td><td></td></tr></table></body></html>
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ge: plugin</title>
+<!--
+  Graph Engineering status page. Self-contained: no network, system fonts, drawn from the JSON in #ge-data
+  and kept live by polling status.js through a plain script element, the one load a file:// page is allowed.
+  Design notes: the hero is what the runner is doing NOW; the state palette is the only colour; sections
+  are divided by rules, not floated as cards; monospace is for ids, hashes and commands only.
+-->
+<style>
+:root {
+  --bg: #12171d; --bg2: #171d24; --surface: #1c242d; --line: #2a343f; --line2: #354150;
+  --text: #e8ebef; --muted: #98a3b0; --faint: #6b7784; --accent: #dfe5ec;
+  --open: #9aa0a6; --ready: #3b82f6; --prog: #f59e0b; --done: #22c55e; --blocked: #ef4444; --skipped: #6b7280;
+  --shadow: 0 1px 0 rgba(0,0,0,.35);
+  --mono: ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "SF Mono", Menlo, monospace;
+  --sans: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --display: "Segoe UI Variable Display", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  color-scheme: dark;
+}
+html[data-theme="light"] {
+  --bg: #f4f6f8; --bg2: #eef1f4; --surface: #ffffff; --line: #dde3ea; --line2: #c9d2dc;
+  --text: #1a2129; --muted: #5b6673; --faint: #8b96a3; --accent: #1f2a36;
+  --open: #8b939b; --skipped: #9aa3ad; --shadow: 0 1px 0 rgba(20,30,40,.06);
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 var(--sans); }
+body { min-height: 100vh; -webkit-font-smoothing: antialiased; }
+a { color: inherit; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; }
+button:focus-visible, [tabindex]:focus-visible, input:focus-visible { outline: 2px solid var(--ready); outline-offset: 2px; }
+code, .mono { font-family: var(--mono); font-size: .92em; }
+.wrap { max-width: 1480px; margin: 0 auto; padding: 0 28px; }
+@media (max-width: 720px) { .wrap { padding: 0 16px; } }
+
+/* top bar */
+.top { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line); }
+.top .wrap { display: flex; align-items: center; gap: 18px; height: 52px; }
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand .name { font-family: var(--display); font-weight: 650; font-size: 17px; letter-spacing: -.01em; }
+.brand .subject { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.top .spacer { flex: 1; }
+.live { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; white-space: nowrap; }
+.live .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--done); box-shadow: 0 0 0 0 color-mix(in srgb, var(--done) 60%, transparent); }
+.live.stale .dot { background: var(--prog); }
+.live.static .dot { background: var(--faint); }
+.live .dot.beat { animation: beat 1.2s ease-out 1; }
+@keyframes beat { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--done) 60%, transparent); } 100% { box-shadow: 0 0 0 9px transparent; } }
+.iconbtn { width: 34px; height: 34px; border-radius: 8px; display: inline-grid; place-items: center; color: var(--muted); border: 1px solid transparent; }
+.iconbtn:hover { border-color: var(--line2); color: var(--text); }
+.iconbtn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+/* hold banner */
+.hold { display: none; padding: 10px 0; font-weight: 600; }
+.hold.on { display: block; }
+.hold .wrap { display: flex; gap: 12px; align-items: center; }
+.hold.paused { background: color-mix(in srgb, var(--prog) 16%, var(--bg)); color: var(--prog); border-bottom: 1px solid color-mix(in srgb, var(--prog) 40%, transparent); }
+.hold.stopped { background: color-mix(in srgb, var(--blocked) 16%, var(--bg)); color: var(--blocked); border-bottom: 1px solid color-mix(in srgb, var(--blocked) 40%, transparent); }
+.hold .note { color: var(--text); font-weight: 400; }
+
+/* now: the hero */
+.now { padding: 28px 0 24px; border-bottom: 1px solid var(--line); }
+.now .wrap { display: grid; grid-template-columns: 1fr auto; gap: 28px; align-items: start; }
+@media (max-width: 860px) { .now .wrap { grid-template-columns: 1fr; } }
+.now .kicker { color: var(--muted); font-size: 13px; margin-bottom: 8px; display: flex; gap: 10px; align-items: center; }
+.now .kicker .state { display: inline-flex; align-items: center; gap: 7px; font-weight: 600; color: var(--text); }
+.now .kicker .state::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c, var(--faint)); }
+.now h1 { font-family: var(--display); font-size: clamp(22px, 2.6vw, 34px); line-height: 1.15; letter-spacing: -.015em; font-weight: 600; margin: 0; max-width: 36ch; text-wrap: balance; }
+.now h1.long { font-size: clamp(18px, 1.8vw, 24px); max-width: 60ch; text-wrap: pretty; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.now h1 .id { font-family: var(--mono); font-weight: 600; font-size: .78em; color: var(--prog); margin-right: .45em; letter-spacing: 0; }
+.now h1 .id.idle { color: var(--ready); }
+.now h1 .id.blocked { color: var(--blocked); }
+.now .facts { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--muted); font-size: 14px; }
+.now .facts b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+.now .facts .gate { display: inline-flex; align-items: center; gap: 7px; }
+.now .facts .gate .spin { width: 10px; height: 10px; border: 2px solid var(--prog); border-right-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.now .ring { display: grid; grid-template-columns: auto auto; gap: 0 18px; align-items: center; }
+.ring svg { width: 92px; height: 92px; }
+.ring .num { font-family: var(--display); font-size: 30px; font-weight: 600; letter-spacing: -.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.ring .num small { font-size: 15px; color: var(--muted); font-weight: 500; margin-left: 4px; }
+.ring .of { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.counts { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; font-size: 13px; color: var(--muted); grid-column: 1 / -1; }
+.counts span { display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; }
+.counts span::before { content: ""; width: 8px; height: 8px; border-radius: 2px; background: var(--c); }
+.counts b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+.counts button.on { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+
+/* sections */
+section.block { border-bottom: 1px solid var(--line); padding: 22px 0 26px; }
+.sech { display: flex; align-items: baseline; gap: 14px; margin-bottom: 14px; flex-wrap: wrap; }
+.sech h2 { font-family: var(--display); font-size: 16px; font-weight: 650; margin: 0; letter-spacing: -.01em; }
+.sech .hint { color: var(--muted); font-size: 13px; }
+.sech .tools { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.chip { border: 1px solid var(--line2); border-radius: 999px; padding: 3px 11px; font-size: 13px; color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+.chip:hover { color: var(--text); }
+.chip.on { background: var(--accent); color: var(--bg); border-color: var(--accent); }
+.chip .sw { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+input.search { background: var(--surface); border: 1px solid var(--line2); color: var(--text); border-radius: 8px; padding: 5px 10px; font-size: 13px; width: 200px; }
+
+/* graph */
+.graph { position: relative; background: var(--bg2);
+  background-image: radial-gradient(color-mix(in srgb, var(--line2) 80%, transparent) 1px, transparent 1px); background-size: 18px 18px;
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden; height: 560px; min-height: 240px; max-height: 90vh; resize: vertical;
+  cursor: grab; touch-action: none; user-select: none; }
+.graph.panning { cursor: grabbing; }
+.graph svg { display: block; width: 100%; height: 100%; }
+.graph text { font-family: var(--sans); }
+.graph .hud { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 4px; align-items: center; background: color-mix(in srgb, var(--surface) 88%, transparent);
+  border: 1px solid var(--line2); border-radius: 8px; padding: 3px; font-size: 12px; color: var(--muted); backdrop-filter: blur(6px); }
+.graph .hud button { width: 26px; height: 24px; border-radius: 5px; display: grid; place-items: center; color: var(--muted); }
+.graph .hud button:hover { background: var(--bg2); color: var(--text); }
+.graph .hud .k { min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
+.graph .help { position: absolute; left: 12px; bottom: 12px; font-size: 12px; color: var(--faint); pointer-events: none; }
+.gnode { cursor: pointer; }
+.gnode rect.body { fill: color-mix(in srgb, var(--c) 14%, var(--surface)); stroke: var(--c); stroke-width: 1.2; }
+.gnode.done rect.body { fill: color-mix(in srgb, var(--c) 22%, var(--surface)); }
+.gnode.skipped rect.body { fill: url(#hatch); stroke: var(--skipped); }
+.gnode.selected rect.body { stroke-width: 2.5; }
+.gnode:hover rect.body { stroke-width: 2; }
+.gnode rect.bar { fill: var(--c); }
+.gnode .id { font-family: var(--mono); font-weight: 600; font-size: 11.5px; fill: var(--text); }
+.gnode .sub { font-size: 11px; fill: var(--muted); }
+.gnode.prog rect.body { animation: pulse 2.2s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { stroke-width: 1.2; } 50% { stroke-width: 3; } }
+.gnode.flash rect.body { animation: flash 1.4s ease-out 1; }
+@keyframes flash { 0% { fill: color-mix(in srgb, var(--c) 70%, var(--surface)); } 100% { fill: color-mix(in srgb, var(--c) 14%, var(--surface)); } }
+.edge { fill: none; stroke: var(--line2); stroke-width: 1.2; }
+.edge.hot { stroke: var(--prog); stroke-width: 1.6; }
+.edge.next { stroke: var(--ready); }
+.band { fill: color-mix(in srgb, var(--surface) 55%, transparent); stroke: var(--line); }
+.band-lab { font-family: var(--display); font-weight: 600; font-size: 12px; fill: var(--muted); }
+.band-title { font-size: 11.5px; fill: var(--faint); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--muted); font-size: 12.5px; margin-top: 10px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend span::before { content: ""; width: 10px; height: 10px; border-radius: 3px; background: var(--c); }
+.legend span.skipped::before { background: repeating-linear-gradient(45deg, var(--skipped) 0 2px, transparent 2px 5px); }
+
+/* tasks */
+.phase { margin-top: 18px; }
+.phase:first-child { margin-top: 0; }
+.phase-h { display: flex; align-items: baseline; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.phase-h .pid { font-family: var(--display); font-weight: 650; font-size: 14px; }
+.phase-h .pt { color: var(--muted); font-size: 13px; }
+.phase-h .pc { margin-left: auto; color: var(--faint); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.row { border-bottom: 1px solid var(--line); scroll-margin-top: 64px; }
+.row-h { display: grid; grid-template-columns: 18px 76px 1fr auto 20px; gap: 12px; align-items: center; width: 100%; text-align: left; padding: 9px 4px; border-radius: 6px; }
+.row-h:hover { background: var(--bg2); }
+.row.expanded .row-h { background: var(--bg2); }
+.row-h .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c); justify-self: center; }
+.row-h .dot.skipped { background: repeating-linear-gradient(45deg, var(--skipped) 0 2px, transparent 2px 4px); }
+.row-h .dot.prog { box-shadow: 0 0 0 3px color-mix(in srgb, var(--prog) 30%, transparent); }
+.row-h .rid { font-family: var(--mono); font-weight: 600; font-size: 12.5px; }
+.row-h .rsub { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row.expanded .row-h .rsub { white-space: normal; }
+.row-h .rmeta { color: var(--muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.row-h .rmeta .st { color: var(--c); font-weight: 600; }
+.row-h .chev { width: 16px; height: 16px; color: var(--faint); transition: transform .18s; }
+.row.expanded .chev { transform: rotate(180deg); }
+.row.flash .row-h { animation: rowflash 1.4s ease-out 1; }
+@keyframes rowflash { 0% { background: color-mix(in srgb, var(--c) 30%, transparent); } 100% { background: var(--bg2); } }
+@media (max-width: 720px) { .row-h { grid-template-columns: 14px 60px 1fr 20px; } .row-h .rmeta { display: none; } }
+.detail { display: grid; grid-template-columns: minmax(280px, 1fr) minmax(320px, 1.4fr); gap: 20px 32px; padding: 10px 4px 20px 34px; }
+@media (max-width: 900px) { .detail { grid-template-columns: 1fr; padding-left: 4px; } }
+.detail h4 { margin: 0 0 6px; font-size: 12.5px; color: var(--faint); font-weight: 600; }
+.detail .grp { margin-bottom: 16px; }
+.detail dl { margin: 0; display: grid; grid-template-columns: 96px 1fr; gap: 5px 12px; font-size: 13.5px; }
+.detail dt { color: var(--muted); }
+.detail dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.detail dd.mono { font-family: var(--mono); font-size: 12.5px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 1px 9px 1px 6px; border-radius: 999px; border: 1px solid var(--line2); font-size: 12.5px; margin: 0 6px 4px 0; background: var(--surface); }
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--c); }
+.pill.link { cursor: pointer; }
+.pill.link:hover { border-color: var(--text); }
+.tokens { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.tok { background: color-mix(in srgb, var(--done) 12%, var(--surface)); border: 1px solid color-mix(in srgb, var(--done) 40%, transparent); border-radius: 8px; padding: 6px 10px; min-width: 84px; }
+.tok .v { font-family: var(--display); font-size: 20px; font-weight: 600; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.tok .k { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.prose { font-size: 14px; line-height: 1.5; max-width: 70ch; }
+.reason { color: var(--blocked); font-weight: 600; }
+pre.kick { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; line-height: 1.5;
+  white-space: pre-wrap; overflow-wrap: anywhere; max-height: 360px; overflow: auto; margin: 0; }
+.timeline { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.timeline li { display: grid; grid-template-columns: 52px 1fr; gap: 10px; padding: 4px 0; border-bottom: 1px dashed var(--line); }
+.timeline .t { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 12px; }
+.timeline .ok { color: var(--done); font-weight: 600; }
+.timeline .no { color: var(--blocked); font-weight: 600; }
+.timeline .run { color: var(--prog); font-weight: 600; }
+.gatecmd { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.hist { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.hist td { padding: 4px 8px 4px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.hist td.t { white-space: nowrap; color: var(--faint); font-variant-numeric: tabular-nums; }
+.hist td.e { font-weight: 600; white-space: nowrap; }
+.empty { color: var(--faint); font-size: 13px; padding: 10px 4px; }
+
+/* activity + ledger + calls */
+.twocol { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(280px, 1fr); gap: 28px; }
+@media (max-width: 960px) { .twocol { grid-template-columns: 1fr; } }
+.tabs { display: inline-flex; border: 1px solid var(--line2); border-radius: 8px; overflow: hidden; }
+.tabs button { padding: 4px 12px; font-size: 13px; color: var(--muted); }
+.tabs button.on { background: var(--accent); color: var(--bg); }
+.feed { list-style: none; margin: 0; padding: 0; max-height: 440px; overflow: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.feed li { display: grid; grid-template-columns: 112px 1fr; gap: 12px; padding: 7px 12px; border-bottom: 1px solid var(--line); font-size: 13px; }
+.feed li:last-child { border-bottom: 0; }
+.feed .t { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 12px; white-space: nowrap; }
+.feed .who { font-family: var(--mono); font-size: 12px; }
+.feed .ev { font-weight: 600; }
+.feed .ev.done, .feed .ev.MATCH, .feed .ev.resumed { color: var(--done); }
+.feed .ev.started, .feed .ev.running, .feed .ev.paused { color: var(--prog); }
+.feed .ev.blocked, .feed .ev.miss, .feed .ev.NOMATCH { color: var(--blocked); }
+.feed .ev.review, .feed .ev.revised { color: var(--ready); }
+.feed .out { color: var(--muted); overflow-wrap: anywhere; }
+.feed .task { font-family: var(--mono); font-weight: 600; cursor: pointer; }
+.feed .task:hover { text-decoration: underline; }
+.calls ul { list-style: none; margin: 0; padding: 0; }
+.calls li { padding: 10px 12px; border-left: 3px solid var(--blocked); background: color-mix(in srgb, var(--blocked) 8%, var(--surface)); border-radius: 0 8px 8px 0; margin-bottom: 8px; font-size: 13.5px; overflow-wrap: anywhere; }
+.calls details { margin-top: 12px; }
+.calls summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.calls details li { border-left-color: var(--line2); background: var(--surface); color: var(--muted); }
+.goal { color: var(--muted); font-size: 13.5px; line-height: 1.5; max-width: 80ch; white-space: pre-wrap; }
+details.goalbox summary { cursor: pointer; font-family: var(--display); font-weight: 650; font-size: 16px; }
+footer { padding: 18px 0 40px; color: var(--faint); font-size: 12.5px; display: flex; gap: 18px; flex-wrap: wrap; }
+@media (prefers-reduced-motion: reduce) { .gnode.prog rect.body, .live .dot.beat, .now .facts .gate .spin, .gnode.flash rect.body, .row.flash .row-h { animation: none !important; } .chev { transition: none; } }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <div class="brand"><span class="name" id="b-name"></span><span class="subject" id="b-subject"></span></div>
+  <div class="spacer"></div>
+  <div class="live" id="live"><span class="dot"></span><span id="live-text">live</span></div>
+  <button class="iconbtn" id="theme" title="Switch theme" aria-label="Switch theme">
+    <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.4A5.5 5.5 0 0 1 13.4 3.1C13 3 12.5 3 12 3z"/></svg>
+  </button>
+</div></header>
+<div class="hold" id="hold"><div class="wrap"><span id="hold-text"></span><span class="note" id="hold-note"></span></div></div>
+<main>
+  <section class="now"><div class="wrap" id="now"></div></section>
+  <section class="block"><div class="wrap">
+    <div class="sech"><h2>Graph</h2><span class="hint">columns by dependency depth, bands by phase; click a node to open it</span>
+      <div class="tools"><button class="chip" id="fit">Fit all</button><button class="chip" id="locate">Go to current</button></div></div>
+    <div class="graph" id="graph"></div>
+    <div class="legend" id="legend"></div>
+  </div></section>
+  <section class="block"><div class="wrap">
+    <div class="sech"><h2>Tasks</h2><span class="hint" id="task-hint"></span>
+      <div class="tools" id="filters"></div></div>
+    <div id="tasks"></div>
+  </div></section>
+  <section class="block"><div class="wrap twocol">
+    <div>
+      <div class="sech"><h2 id="feed-title">Activity</h2>
+        <div class="tools"><div class="tabs"><button data-tab="activity" class="on">Activity</button><button data-tab="ledger">Ledger</button></div>
+          <input class="search" id="feed-q" placeholder="Filter by task or text"></div></div>
+      <ul class="feed" id="feed"></ul>
+    </div>
+    <div class="calls">
+      <div class="sech"><h2>Calls for you</h2><span class="hint" id="calls-hint"></span></div>
+      <div id="calls"></div>
+    </div>
+  </div></section>
+  <section class="block"><div class="wrap">
+    <details class="goalbox"><summary>Goal</summary><p class="goal" id="goal"></p></details>
+  </div></section>
+  <footer class="wrap" id="foot"></footer>
+</main>
+
+<script id="ge-data" type="application/json">{"version": 1, "name": "plugin", "subject": "Graph Engineering builds itself", "goal": "A goal becomes a task graph; one interactive session runs the graph unattended by dispatching a fresh subagent per node with an independent verifier per close; the human pauses it to test, get a summary, or change the goal. Everything is files in the project's git. Any project, any gate. (Spec `docs/design.md`.)", "generated": "2026-09-08T00:30:56", "project": "GraphEngineering", "state": "idle", "hold": null, "counts": {"open": 0, "ready": 0, "in progress": 0, "done": 3, "blocked": 0, "skipped": 0}, "total": 3, "review_every": 3, "gates": [{"name": "pytest", "command": "python -m pytest tests/ -q", "success": "(?m)^(\\d+) passed(?![^\\n]*\\b(?:failed|error))", "artifact": "stdout", "floor": "62"}], "phases": [{"id": "M", "title": "migration and release", "text": "T12 is the first migration of an existing project onto the plugin; publish waits for the owner's word."}], "bands": [{"phase": "M", "r0": 0, "r1": 1}, {"phase": "", "r0": 1, "r1": 2}], "nodes": [{"id": "T12", "subject": "the first external project migration (anonymised)", "status": "done 96e0322", "kind": "done", "ready": false, "deps": [], "dependents": ["publish", "0.2-polish"], "spec": "the 0.1 build plan (git history, docs/superpowers before 0.3.1) Task 12", "gates": ["pytest"], "commit": "96e0322", "phase": "M", "col": 0, "row": 0, "session": "", "reason": "", "started": "", "finished": "2026-09-05", "minutes": null, "history": [{"ts": "2026-09-05", "session": "-", "task": "T12", "event": "done", "outcome": "pytest 35 passed; the external project's roadmap validates", "commit": "96e0322"}], "summary": {"gates": [], "text": "pytest 35 passed; the external project's roadmap validates"}, "kickoff": ""}, {"id": "publish", "subject": "push 0.1.2 to Popschlock/graph-engineering (public)", "status": "done b5b9c5c", "kind": "done", "ready": false, "deps": ["T12"], "dependents": [], "spec": "docs/design.md §9", "gates": ["pytest"], "commit": "b5b9c5c", "phase": "M", "col": 1, "row": 0, "session": "", "reason": "", "started": "", "finished": "2026-09-06", "minutes": null, "history": [{"ts": "2026-09-06", "session": "d1536b08", "task": "publish", "event": "done", "outcome": "pytest=45; https://github.com/Popschlock/graph-engineering public, main only (e71b372 + this); history branch kept local", "commit": "b5b9c5c"}], "summary": {"gates": [{"name": "pytest", "value": "45"}], "text": "https://github.com/Popschlock/graph-engineering public, main only (e71b372 + this); history branch kept local"}, "kickoff": ""}, {"id": "0.2-polish", "subject": "0.2 polish: hook launcher python3/python; a floor column on gates; init --subject; PAUSE/STOP drawn in status.html; run_cmd timeout; pause reason newline; a second done row for a re-closed node; revise/build told about next's stderr lines; a directory-install .claudeignore", "status": "done b49fb18", "kind": "done", "ready": false, "deps": ["T12"], "dependents": [], "spec": "docs/design.md §11 plus the final review's minors (this session's ledger)", "gates": ["pytest"], "commit": "b49fb18", "phase": "", "col": 0, "row": 1, "session": "", "reason": "", "started": "", "finished": "2026-09-06", "minutes": null, "history": [{"ts": "2026-09-06", "session": "d1536b08", "task": "0.2-polish", "event": "done", "outcome": "pytest=62; the nine 0.1.2 review minors and 0.2.0 -- a gate floor ratchet, a process-tree timeout that actually bounds the clock, re-closed instead of a second done row, a STOP/PAUSE banner, init --subject, the python3/python hook, a flattened pause reason, .claudeignore, and build/revise told about next's stderr", "commit": "b49fb18"}], "summary": {"gates": [{"name": "pytest", "value": "62"}], "text": "the nine 0.1.2 review minors and 0.2.0 -- a gate floor ratchet, a process-tree timeout that actually bounds the clock, re-closed instead of a second done row, a STOP/PAUSE banner, init --subject, the python3/python hook, a flattened pause reason, .claudeignore, and build/revise told about next's stderr"}, "kickoff": ""}], "ledger": [{"ts": "2026-09-05", "session": "-", "task": "T12", "event": "done", "outcome": "pytest 35 passed; the external project's roadmap validates", "commit": "96e0322"}, {"ts": "2026-09-06", "session": "d1536b08", "task": "publish", "event": "done", "outcome": "pytest=45; https://github.com/Popschlock/graph-engineering public, main only (e71b372 + this); history branch kept local", "commit": "b5b9c5c"}, {"ts": "2026-09-06", "session": "d1536b08", "task": "0.2-polish", "event": "done", "outcome": "pytest=62; the nine 0.1.2 review minors and 0.2.0 -- a gate floor ratchet, a process-tree timeout that actually bounds the clock, re-closed instead of a second done row, a STOP/PAUSE banner, init --subject, the python3/python hook, a flattened pause reason, .claudeignore, and build/revise told about next's stderr", "commit": "b49fb18"}, {"ts": "2026-09-06", "session": "", "task": "-", "event": "review", "outcome": "REVIEW: no change; next none", "commit": ""}], "calls": {"open": ["Push 0.2.0, 0.3.0 and 0.3.1 to GitHub (`main`, plus a `v0.3.1` tag)? — FOR: 0.1.2 is what installs from GitHub today, so the nine fixes reach nobody until it is pushed; the tree is clean, the gate is green at 62, and the version bump is what makes the plugin cache pick the new code up at all. AGAINST: nothing is waiting on it, and the hook's `python3` fallback could only be exercised here on a box that has `python` and no `python3`, so the `python3`-present branch is reasoned rather than run."], "decided": ["2026-09-06 — publish 0.1.2 to GitHub now (after the first external migration had run real nodes through the loop): pushed `main` only, as a public repo."]}, "activity": [], "colours": {"open": "#9aa0a6", "ready": "#3b82f6", "in progress": "#f59e0b", "done": "#22c55e", "blocked": "#ef4444", "skipped": "url(#hatch)"}}</script>
+<script>
+(function () {
+  "use strict";
+  var $ = function (s) { return document.querySelector(s); };
+  var h = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+  var store = { get: function (k, d) { try { var v = localStorage.getItem("ge:" + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+                set: function (k, v) { try { localStorage.setItem("ge:" + k, JSON.stringify(v)); } catch (e) {} } };
+  var KIND = { open: "open", ready: "ready", "in progress": "prog", done: "done", blocked: "blocked", skipped: "skipped" };
+  var LABEL = { open: "open", ready: "ready", prog: "in progress", done: "done", blocked: "blocked", skipped: "skipped" };
+  var ORDER = ["prog", "blocked", "ready", "open", "done", "skipped"];
+
+  var data = null, prev = null, expanded = new Set(store.get("expanded", [])), filter = store.get("filter", "all"),
+      query = "", tab = "activity", feedq = "", selected = null, lastLoad = 0, fails = 0, ticker = null, view = null, graphPos = {}, graphSize = [0, 0], dragged = false;
+
+  function stateOf(n) { return n.ready ? "ready" : KIND[n.kind] || "open"; }
+  function byId(id) { for (var i = 0; i < data.nodes.length; i++) if (data.nodes[i].id === id) return data.nodes[i]; return null; }
+  function mins(m) { if (m == null) return ""; var d = Math.floor(m / 1440), hh = Math.floor((m % 1440) / 60), mm = m % 60;
+    return d ? d + "d " + hh + "h" : hh ? hh + "h " + (mm < 10 ? "0" : "") + mm + "m" : mm + "m"; }
+  function since(ts) { if (!ts) return null; var d = new Date(ts.replace(" ", "T")); if (isNaN(d)) return null; return Math.max(0, Math.floor((Date.now() - d) / 60000)); }
+  function ago(ms) { var s = Math.round(ms / 1000); return s < 60 ? s + "s ago" : Math.round(s / 60) + "m ago"; }
+  function tsShort(ts) { return (ts || "").replace(/^\d{4}-/, "").replace("T", " ").slice(0, 11); }
+  function short(hash) { return (hash || "").slice(0, 7); }
+  function activityFor(n) { var t0 = n.started ? n.started.replace(" ", "T") : "";
+    return data.activity.filter(function (a) { return a.kind === "gate" && n.gates.indexOf(a.name) >= 0 && (!t0 || a.ts >= t0); }); }
+  function callFor(n) { return data.calls.open.filter(function (c) { return c.indexOf(n.id) >= 0; }); }
+
+  // ---- header + hero ----
+  function renderTop() {
+    $("#b-name").textContent = data.name; $("#b-subject").textContent = data.subject || data.project;
+    document.title = "ge: " + data.name;
+    var hold = $("#hold"); hold.className = "hold" + (data.hold ? " on " + data.hold.kind : "");
+    if (data.hold) { $("#hold-text").textContent = data.hold.kind === "stopped" ? "Stopped. Nothing is dispatched until /ge-resume-roadmap." : "Paused: " + data.hold.reason; $("#hold-note").textContent = data.hold.note || ""; }
+  }
+  function renderNow() {
+    var ip = data.nodes.filter(function (n) { return n.kind === "in progress"; });
+    var ready = data.nodes.filter(function (n) { return n.ready; });
+    var blocked = data.nodes.filter(function (n) { return n.kind === "blocked"; });
+    var c = data.counts, done = c.done, total = data.total, pct = total ? done / total : 0;
+    var html = "", kicker, head, facts = [], headLen = 0, headTitle = "";
+    if (data.hold && data.hold.kind === "stopped") { kicker = ["Stopped", "var(--blocked)"]; }
+    else if (data.hold) { kicker = ["Paused", "var(--prog)"]; }
+    else if (ip.length) { kicker = ["Running", "var(--prog)"]; }
+    else if (blocked.length && !ready.length) { kicker = ["Waiting on you", "var(--blocked)"]; }
+    else { kicker = ["Idle", "var(--ready)"]; }
+    if (ip.length) {
+      var n = ip[0], m = since(n.started);
+      head = '<span class="id">' + h(n.id) + '</span>' + h(n.subject); headLen = n.subject.length; headTitle = n.subject;
+      if (m != null) facts.push("running <b>" + mins(m) + "</b>");
+      if (n.session) facts.push('session <b class="mono">' + h(n.session) + "</b>");
+      var act = activityFor(n), last = act[act.length - 1];
+      if (last && last.state === "running") facts.push('<span class="gate"><span class="spin"></span>gate <b>' + h(last.name) + "</b> running" + (since(last.ts) != null ? " for <b>" + mins(since(last.ts)) + "</b>" : "") + "</span>");
+      else if (last) facts.push("gate <b>" + h(last.name) + "</b> " + (last.state === "MATCH" ? "passed" : "failed") + (last.detail ? " (" + h(last.detail) + ")" : ""));
+      if (ip.length > 1) facts.push("and " + (ip.length - 1) + " more in progress");
+    } else if (blocked.length && !ready.length) {
+      head = '<span class="id blocked">' + h(blocked[0].id) + "</span>" + h(blocked[0].subject); headLen = blocked[0].subject.length; headTitle = blocked[0].subject;
+      facts.push('<span class="reason">' + h(blocked[0].reason || blocked[0].status) + "</span>");
+    } else if (ready.length) {
+      head = '<span class="id idle">next</span>' + h(ready[0].id) + " — " + h(ready[0].subject); headLen = ready[0].subject.length; headTitle = ready[0].subject;
+      facts.push("<b>" + ready.length + "</b> ready" + (blocked.length ? ", <b>" + blocked.length + "</b> blocked" : ""));
+    } else if (done === total && total) { head = "Every task is done."; }
+    else { head = "Nothing is ready."; if (blocked.length) facts.push("<b>" + blocked.length + "</b> blocked"); }
+    if (data.calls.open.length) facts.push('<b style="color:var(--blocked)">' + data.calls.open.length + "</b> open call" + (data.calls.open.length > 1 ? "s" : "") + " for you");
+    html += '<div><div class="kicker"><span class="state" style="--c:' + kicker[1] + '">' + kicker[0] + "</span><span>" + h(data.project) + " / " + h(data.name) + "</span></div>";
+    html += '<h1 class="' + (headLen > 90 ? "long" : "") + '" title="' + h(headTitle) + '">' + head + "</h1><div class=\"facts\">" + facts.map(function (f) { return "<span>" + f + "</span>"; }).join("") + "</div></div>";
+    var r = 40, C = 2 * Math.PI * r;
+    html += '<div class="ring"><svg viewBox="0 0 100 100" aria-hidden="true"><circle cx="50" cy="50" r="' + r + '" fill="none" stroke="var(--line2)" stroke-width="9"/>' +
+      '<circle cx="50" cy="50" r="' + r + '" fill="none" stroke="var(--done)" stroke-width="9" stroke-linecap="round" stroke-dasharray="' + (C * pct).toFixed(1) + " " + C.toFixed(1) + '" transform="rotate(-90 50 50)"/></svg>' +
+      '<div><div class="num">' + done + "<small>/ " + total + "</small></div><div class=\"of\">" + Math.round(pct * 100) + "% of tasks done</div></div>";
+    html += '<div class="counts">' + ORDER.map(function (k) { var v = c[LABEL[k]] || 0; return v ? '<span style="--c:var(--' + k + ')"><b>' + v + "</b> " + LABEL[k] + "</span>" : ""; }).join("") + "</div></div>";
+    $("#now").innerHTML = html;
+  }
+
+  // ---- graph ----
+  function renderGraph() {
+    var CW = 236, RH = 56, W = 206, H = 42, X0 = 26, Y0 = 16, PAD = 8, BH = 28;
+    var ncols = 0, nrows = 0;
+    data.nodes.forEach(function (n) { ncols = Math.max(ncols, n.col + 1); nrows = Math.max(nrows, n.row + 1); });
+    var bandOf = {}; data.bands.forEach(function (b, i) { for (var r = b.r0; r < b.r1; r++) bandOf[r] = i; });
+    var yOf = function (row) { return Y0 + row * RH + ((bandOf[row] || 0) + 1) * BH; };
+    var width = X0 * 2 + ncols * CW, height = Y0 * 2 + nrows * RH + data.bands.length * BH;
+    var pos = {}; data.nodes.forEach(function (n) { pos[n.id] = [X0 + n.col * CW, yOf(n.row)]; });
+    graphPos = pos; graphSize = [width, height];
+    var s = '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Task graph">';
+    s += '<defs><marker id="arr" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="var(--line2)"/></marker>' +
+         '<marker id="arr-hot" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0,0 L7,3.5 L0,7 z" fill="var(--prog)"/></marker>' +
+         '<pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--surface)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--skipped)" stroke-width="2"/></pattern></defs>';
+    s += '<g id="gview">';
+    var phases = {}; data.phases.forEach(function (p) { phases[p.id] = p; });
+    data.bands.forEach(function (b) {
+      var y = yOf(b.r0) - BH, hh = (b.r1 - b.r0) * RH + BH - PAD; var p = phases[b.phase];
+      s += '<rect class="band" x="4" y="' + y + '" width="' + (width - 8) + '" height="' + hh + '" rx="6"/>';
+      s += '<text class="band-lab" x="14" y="' + (y + 18) + '">' + h(b.phase || "other") + "</text>";
+      if (p && p.title) s += '<text class="band-title" x="' + (22 + 8 * (b.phase || "other").length) + '" y="' + (y + 18) + '">' + h(p.title) + "</text>";
+    });
+    var hot = {}; data.nodes.forEach(function (n) { if (n.kind === "in progress") n.deps.forEach(function (d) { hot[d + ">" + n.id] = "hot"; }); if (n.ready) n.deps.forEach(function (d) { hot[d + ">" + n.id] = hot[d + ">" + n.id] || "next"; }); });
+    data.nodes.forEach(function (n) {
+      var p = pos[n.id];
+      n.deps.forEach(function (d) {
+        var q = pos[d]; if (!q) return;
+        var x1 = q[0] + W, y1 = q[1] + H / 2, x2 = p[0], y2 = p[1] + H / 2, cls = hot[d + ">" + n.id] || "", path;
+        if (x2 >= x1 + 12) { var dx = Math.max(24, (x2 - x1) / 2); path = "M" + x1 + "," + y1 + " C" + (x1 + dx) + "," + y1 + " " + (x2 - dx) + "," + y2 + " " + x2 + "," + y2; }
+        else {  // the target sits left of the source (a wrap into the next band): leave right, dive, re-enter from the left
+          var ym = y1 < y2 ? q[1] + H + (RH - H) / 2 : p[1] + H + (RH - H) / 2, r = 40;
+          path = "M" + x1 + "," + y1 + " C" + (x1 + r) + "," + y1 + " " + (x1 + r) + "," + ym + " " + (x1 + r - 16) + "," + ym +
+                 " L" + (x2 - r + 16) + "," + ym + " C" + (x2 - r) + "," + ym + " " + (x2 - r) + "," + y2 + " " + x2 + "," + y2;
+        }
+        s += '<path class="edge ' + cls + '" d="' + path + '" marker-end="url(#' + (cls === "hot" ? "arr-hot" : "arr") + ')"/>';
+      });
+    });
+    data.nodes.forEach(function (n) {
+      var p = pos[n.id], st = stateOf(n), sub = n.subject.length > 30 ? n.subject.slice(0, 29) + "…" : n.subject;
+      s += '<g class="gnode ' + st + (selected === n.id ? " selected" : "") + (prev && prev[n.id] && prev[n.id] !== st ? " flash" : "") + '" data-id="' + h(n.id) + '" style="--c:var(--' + st + ')" tabindex="0" role="button">' +
+           "<title>" + h(n.id) + ": " + h(n.subject) + " [" + h(n.status) + "]</title>" +
+           '<rect class="body" x="' + p[0] + '" y="' + p[1] + '" width="' + W + '" height="' + H + '" rx="6"/>' +
+           '<rect class="bar" x="' + p[0] + '" y="' + p[1] + '" width="4" height="' + H + '" rx="2"/>' +
+           '<text class="id" x="' + (p[0] + 12) + '" y="' + (p[1] + 17) + '">' + h(n.id) + "</text>" +
+           '<text class="sub" x="' + (p[0] + 12) + '" y="' + (p[1] + 32) + '">' + h(sub) + "</text></g>";
+    });
+    s += "</g></svg>";
+    s += '<div class="hud"><button data-zoom="-1" title="Zoom out">−</button><span class="k" id="zoomk"></span><button data-zoom="1" title="Zoom in">+</button></div>';
+    s += '<div class="help">drag to pan · wheel to zoom · double-click to fit</div>';
+    var g = $("#graph"), first = !view; g.innerHTML = s;
+    if (first && !g.style.height) g.style.height = Math.min(560, Math.max(220, graphSize[1] + 24)) + "px";  // a small roadmap gets a small window
+    if (first) { var saved = store.get("view:" + data.name, null); view = saved && saved.k ? saved : null;
+      if (!view) { var ipn = data.nodes.filter(function (n) { return n.kind === "in progress"; })[0]; if (ipn) centerOn(ipn.id, 1); else fitAll(); } }
+    applyView();
+    $("#legend").innerHTML = ORDER.map(function (k) { return '<span class="' + k + '" style="--c:var(--' + k + ')">' + LABEL[k] + "</span>"; }).join("");
+  }
+
+  // ---- graph viewport: drag pans, wheel zooms about the cursor, double-click fits (blueprint-editor habits) ----
+  function applyView() {
+    var gv = document.getElementById("gview"); if (!gv || !view) return;
+    gv.setAttribute("transform", "translate(" + view.x.toFixed(1) + "," + view.y.toFixed(1) + ") scale(" + view.k.toFixed(3) + ")");
+    var zk = $("#zoomk"); if (zk) zk.textContent = Math.round(view.k * 100) + "%";
+    store.set("view:" + data.name, view);
+  }
+  function fitAll() {
+    var g = $("#graph"), W = g.clientWidth || 800, Hh = g.clientHeight || 560, k = Math.min(W / graphSize[0], Hh / graphSize[1], 1.4);
+    view = { k: k, x: (W - graphSize[0] * k) / 2, y: (Hh - graphSize[1] * k) / 2 }; applyView();
+  }
+  function centerOn(id, k) {
+    var g = $("#graph"), p = graphPos[id]; if (!p) return;
+    k = k || (view ? view.k : 1); view = { k: k, x: g.clientWidth / 2 - (p[0] + 103) * k, y: g.clientHeight / 2 - (p[1] + 21) * k }; applyView();
+  }
+  function zoomAt(f, cx, cy) {
+    var k = Math.min(3, Math.max(0.15, view.k * f)), r = k / view.k;
+    view = { k: k, x: cx - (cx - view.x) * r, y: cy - (cy - view.y) * r }; applyView();
+  }
+  (function () {
+    var g = $("#graph"), drag = null;
+    g.addEventListener("pointerdown", function (e) { if (e.target.closest(".hud")) return; drag = { x: e.clientX, y: e.clientY, vx: view ? view.x : 0, vy: view ? view.y : 0, moved: false }; g.setPointerCapture(e.pointerId); dragged = false; });
+    g.addEventListener("pointermove", function (e) {
+      if (!drag || !view) return; var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+      drag.moved = true; dragged = true; g.classList.add("panning"); view.x = drag.vx + dx; view.y = drag.vy + dy; applyView();
+    });
+    var up = function (e) { if (drag && g.hasPointerCapture && g.hasPointerCapture(e.pointerId)) g.releasePointerCapture(e.pointerId); drag = null; g.classList.remove("panning"); };
+    g.addEventListener("pointerup", up); g.addEventListener("pointercancel", up);
+    g.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+    g.addEventListener("wheel", function (e) { if (!view) return; e.preventDefault(); var r = g.getBoundingClientRect(); zoomAt(e.deltaY < 0 ? 1.15 : 1 / 1.15, e.clientX - r.left, e.clientY - r.top); }, { passive: false });
+    g.addEventListener("dblclick", function (e) { if (e.target.closest(".gnode,.hud")) return; fitAll(); });
+    window.addEventListener("resize", function () { if (view) applyView(); });
+  })();
+
+  // ---- tasks ----
+  function rowMeta(n) {
+    var st = stateOf(n), m = [];
+    if (n.kind === "in progress") { var s = since(n.started); m.push('<span class="st">running' + (s != null ? " " + mins(s) : "") + "</span>"); }
+    else if (n.kind === "done") { if (n.minutes != null) m.push(mins(n.minutes)); if (n.commit) m.push('<span class="mono">' + h(short(n.commit)) + "</span>"); m.push('<span class="st">done</span>'); }
+    else if (n.kind === "blocked") m.push('<span class="st">blocked: ' + h(n.reason) + "</span>");
+    else if (n.ready) m.push('<span class="st">ready</span>');
+    else if (n.kind === "skipped") m.push("skipped");
+    else m.push("waits on " + n.deps.filter(function (d) { var x = byId(d); return x && x.kind !== "done"; }).map(h).join(", "));
+    return m.join(" &nbsp;·&nbsp; ");
+  }
+  function pills(ids) { return ids.length ? ids.map(function (d) { var x = byId(d); var st = x ? stateOf(x) : "open"; return '<span class="pill link" data-go="' + h(d) + '" style="--c:var(--' + st + ')">' + h(d) + "</span>"; }).join("") : '<span class="empty" style="padding:0">none</span>'; }
+  function detail(n) {
+    var gates = {}; data.gates.forEach(function (g) { gates[g.name] = g; });
+    var L = '<div><div class="grp"><dl>';
+    L += "<dt>Status</dt><dd>" + h(n.status) + "</dd>";
+    if (n.started) L += "<dt>Started</dt><dd>" + h(n.started) + (n.session ? ' by <span class="mono">' + h(n.session) + "</span>" : "") + "</dd>";
+    if (n.finished) L += "<dt>" + (n.kind === "blocked" ? "Blocked" : "Finished") + "</dt><dd>" + h(n.finished) + (n.minutes != null ? " (" + mins(n.minutes) + ")" : "") + "</dd>";
+    if (n.commit) L += '<dt>Commit</dt><dd class="mono">' + h(n.commit) + "</dd>";
+    L += "<dt>Phase</dt><dd>" + h(n.phase || "other") + "</dd>";
+    L += "<dt>Depends on</dt><dd>" + pills(n.deps) + "</dd><dt>Unblocks</dt><dd>" + pills(n.dependents) + "</dd>";
+    L += "<dt>Spec</dt><dd>" + h(n.spec || "—") + "</dd>";
+    L += "<dt>Gates</dt><dd>" + (n.gates.length ? n.gates.map(function (g) { var x = gates[g]; return "<div><b>" + h(g) + "</b>" + (x ? ' <span class="gatecmd">' + h(x.command) + (x.floor ? " (floor " + h(x.floor) + ")" : "") + "</span>" : "") + "</div>"; }).join("") : "none") + "</dd>";
+    L += "</dl></div></div>";
+    var R = "<div>";
+    if (n.kind === "in progress") {
+      var act = activityFor(n);
+      R += '<div class="grp"><h4>Gate activity this window</h4>' + (act.length ? '<ul class="timeline">' + act.slice(-12).map(function (a) {
+        return '<li><span class="t">' + h(a.ts.slice(11, 16)) + '</span><span><span class="' + (a.state === "running" ? "run" : a.state === "MATCH" ? "ok" : "no") + '">' + h(a.state === "MATCH" ? "passed" : a.state === "running" ? "running" : "failed") + "</span> " + h(a.name) + (a.detail ? ' <span style="color:var(--muted)">' + h(a.detail) + "</span>" : "") + "</span></li>"; }).join("") + "</ul>" : '<div class="empty">No gate has run yet in this window.</div>') + "</div>";
+      if (n.kickoff) R += '<div class="grp"><h4>Kickoff brief</h4><pre class="kick">' + h(n.kickoff) + "</pre></div>";
+    } else if (n.kind === "done" && n.summary) {
+      R += '<div class="grp"><h4>Completion summary</h4>' + (n.summary.gates.length ? '<div class="tokens">' + n.summary.gates.map(function (g) { return '<div class="tok"><div class="v">' + h(g.value) + '</div><div class="k">' + h(g.name) + "</div></div>"; }).join("") + "</div>" : "") +
+           (n.summary.text ? '<p class="prose">' + h(n.summary.text) + "</p>" : "") + "</div>";
+    } else if (n.kind === "blocked") {
+      var calls = callFor(n);
+      R += '<div class="grp"><h4>Why</h4><p class="prose reason">' + h(n.reason || n.status) + "</p>" + (calls.length ? '<h4>The open call</h4><div class="calls"><ul>' + calls.map(function (c) { return "<li>" + h(c) + "</li>"; }).join("") + "</ul></div>" : "") + "</div>";
+    } else if (n.kind === "skipped") {
+      R += '<div class="grp"><h4>Why</h4><p class="prose">' + h(n.reason) + "</p></div>";
+    } else if (n.kickoff) {
+      R += '<div class="grp"><h4>Kickoff brief (dispatches next)</h4><pre class="kick">' + h(n.kickoff) + "</pre></div>";
+    }
+    if (n.history.length) R += '<div class="grp"><h4>History</h4><table class="hist">' + n.history.map(function (r) {
+      return '<tr><td class="t">' + h(r.ts) + '</td><td class="e" style="color:var(--' + ({ done: "done", "re-closed": "done", started: "prog", blocked: "blocked", miss: "blocked" }[r.event] || "text") + ')">' + h(r.event) + "</td><td>" + h(r.outcome) + (r.commit ? ' <span class="mono" style="color:var(--faint)">' + h(short(r.commit)) + "</span>" : "") + "</td></tr>"; }).join("") + "</table></div>";
+    if (!n.history.length && n.kind === "open" && !n.kickoff) R += '<div class="empty">Nothing has happened to this task yet.</div>';
+    return '<div class="detail">' + L + R + "</div></div>";
+  }
+  function visible(n) {
+    var st = stateOf(n);
+    if (filter !== "all" && st !== filter) return false;
+    if (query && (n.id + " " + n.subject + " " + n.spec).toLowerCase().indexOf(query) < 0) return false;
+    return true;
+  }
+  function renderTasks() {
+    var groups = [], seen = {};
+    data.phases.forEach(function (p) { groups.push({ id: p.id, title: p.title, nodes: [] }); seen[p.id] = groups[groups.length - 1]; });
+    var other = { id: "", title: "", nodes: [] };
+    data.nodes.forEach(function (n) { (seen[n.phase] || other).nodes.push(n); });
+    if (other.nodes.length) groups.push(other);
+    var shown = 0, html = "";
+    groups.forEach(function (g) {
+      var vis = g.nodes.filter(visible); if (!vis.length) return; shown += vis.length;
+      var dn = g.nodes.filter(function (n) { return n.kind === "done"; }).length;
+      html += '<div class="phase"><div class="phase-h"><span class="pid">' + h(g.id || "other") + '</span><span class="pt">' + h(g.title) + '</span><span class="pc">' + dn + " / " + g.nodes.length + " done</span></div>";
+      vis.forEach(function (n) {
+        var st = stateOf(n), open = expanded.has(n.id);
+        html += '<div class="row ' + st + (open ? " expanded" : "") + (prev && prev[n.id] && prev[n.id] !== st ? " flash" : "") + '" id="row-' + h(n.id) + '" style="--c:var(--' + st + ')">' +
+          '<button class="row-h" data-toggle="' + h(n.id) + '" aria-expanded="' + open + '"><span class="dot ' + st + '"></span><span class="rid">' + h(n.id) + '</span><span class="rsub">' + h(n.subject) + '</span><span class="rmeta">' + rowMeta(n) + "</span>" +
+          '<svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 6l5 5 5-5"/></svg></button>' + (open ? detail(n) : "") + "</div>";
+      });
+      html += "</div>";
+    });
+    $("#tasks").innerHTML = html || '<div class="empty">No task matches this filter.</div>';
+    $("#task-hint").textContent = shown + " of " + data.total + " shown";
+    var f = '<button class="chip' + (filter === "all" ? " on" : "") + '" data-filter="all">all</button>';
+    ORDER.forEach(function (k) { var v = data.counts[LABEL[k]] || 0; if (v) f += '<button class="chip' + (filter === k ? " on" : "") + '" data-filter="' + k + '" style="--c:var(--' + k + ')"><span class="sw"></span>' + LABEL[k] + " " + v + "</button>"; });
+    f += '<input class="search" id="q" placeholder="Search tasks" value="' + h(query) + '">';
+    $("#filters").innerHTML = f;
+  }
+
+  // ---- feed + calls ----
+  function renderFeed() {
+    var items = [], q = feedq.toLowerCase();
+    if (tab === "activity") {
+      data.activity.slice().reverse().forEach(function (a) { items.push({ t: tsShort(a.ts), who: "", ev: a.state === "NO MATCH" ? "NOMATCH" : a.state, evText: a.state === "MATCH" ? "passed" : a.state === "running" ? "running" : a.state === "NO MATCH" ? "failed" : a.state, task: "", out: (a.kind === "gate" ? "gate " + a.name + (a.detail ? " " + a.detail : "") : a.text) }); });
+      data.ledger.slice().reverse().forEach(function (r) { items.push({ t: tsShort(r.ts), who: r.session, ev: r.event.split(" ")[0], evText: r.event, task: r.task === "-" ? "" : r.task, out: r.outcome + (r.commit ? " " + short(r.commit) : "") }); });
+      items.sort(function (a, b) { return a.t < b.t ? 1 : a.t > b.t ? -1 : 0; });
+    } else {
+      data.ledger.slice().reverse().forEach(function (r) { items.push({ t: r.ts, who: r.session, ev: r.event.split(" ")[0], evText: r.event, task: r.task === "-" ? "" : r.task, out: r.outcome + (r.commit ? " " + short(r.commit) : "") }); });
+    }
+    if (q) items = items.filter(function (i) { return (i.task + " " + i.evText + " " + i.out + " " + i.who).toLowerCase().indexOf(q) >= 0; });
+    $("#feed").innerHTML = items.length ? items.slice(0, 200).map(function (i) {
+      return '<li><span class="t">' + h(i.t) + '</span><span><span class="ev ' + h(i.ev) + '">' + h(i.evText) + "</span> " + (i.task ? '<span class="task" data-go="' + h(i.task) + '">' + h(i.task) + "</span> " : "") + '<span class="out">' + h(i.out) + "</span>" + (i.who ? ' <span class="who" style="color:var(--faint)">' + h(i.who) + "</span>" : "") + "</span></li>"; }).join("")
+      : '<li><span class="t"></span><span class="empty">Nothing here yet.</span></li>';
+    document.querySelectorAll(".tabs button").forEach(function (b) { b.className = b.dataset.tab === tab ? "on" : ""; });
+    $("#feed-title").textContent = tab === "activity" ? "Activity" : "Ledger";
+  }
+  function renderCalls() {
+    var o = data.calls.open, d = data.calls.decided;
+    $("#calls-hint").textContent = o.length ? o.length + " waiting" : "nothing waiting";
+    $("#calls").innerHTML = (o.length ? "<ul>" + o.map(function (c) { return "<li>" + h(c) + "</li>"; }).join("") + "</ul>" : '<div class="empty">No decision is waiting on you. Anything an agent cannot decide lands here.</div>') +
+      (d.length ? "<details><summary>" + d.length + " decided</summary><ul>" + d.slice().reverse().map(function (c) { return "<li>" + h(c) + "</li>"; }).join("") + "</ul></details>" : "");
+    $("#goal").textContent = data.goal || "";
+    $("#foot").innerHTML = "<span>generated " + h(data.generated.replace("T", " ")) + "</span>" + (data.gates.length ? "<span>gates: " + data.gates.map(function (g) { return h(g.name); }).join(", ") + "</span>" : "") + "<span>review every " + h(data.review_every) + " closes</span><span>ge/" + h(data.name) + "/status.html</span>";
+  }
+  function renderAll() { renderTop(); renderNow(); renderGraph(); renderTasks(); renderFeed(); renderCalls(); }
+
+  // ---- interaction ----
+  function toggle(id, force) {
+    if (force === true || (force == null && !expanded.has(id))) expanded.add(id); else expanded.delete(id);
+    store.set("expanded", Array.from(expanded)); selected = id; renderTasks(); renderGraph();
+  }
+  function goTo(id) { toggle(id, true); var el = document.getElementById("row-" + id); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); }
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-toggle],[data-go],[data-filter],[data-tab],[data-zoom],.gnode,#fit,#locate,#theme");
+    if (!t) return;
+    if (t.classList.contains("gnode") && dragged) { dragged = false; return; }
+    if (t.dataset.toggle) toggle(t.dataset.toggle);
+    else if (t.dataset.go) { goTo(t.dataset.go); centerOn(t.dataset.go); }
+    else if (t.dataset.filter) { filter = t.dataset.filter; store.set("filter", filter); renderTasks(); }
+    else if (t.dataset.tab) { tab = t.dataset.tab; renderFeed(); }
+    else if (t.classList.contains("gnode")) goTo(t.dataset.id);
+    else if (t.dataset.zoom) { var g = $("#graph"); zoomAt(t.dataset.zoom === "1" ? 1.25 : 0.8, g.clientWidth / 2, g.clientHeight / 2); }
+    else if (t.id === "fit") fitAll();
+    else if (t.id === "locate") { var cur = data.nodes.filter(function (n) { return n.kind === "in progress"; })[0] || data.nodes.filter(function (n) { return n.ready; })[0]; if (cur) { centerOn(cur.id, Math.max(view.k, 1)); goTo(cur.id); } }
+    else if (t.id === "theme") { var th = document.documentElement.dataset.theme === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = th; store.set("theme", th); }
+  });
+  document.addEventListener("keydown", function (e) { if ((e.key === "Enter" || e.key === " ") && e.target.classList && e.target.classList.contains("gnode")) { e.preventDefault(); goTo(e.target.dataset.id); } });
+  document.addEventListener("input", function (e) {
+    if (e.target.id === "q") { query = e.target.value.toLowerCase(); var pos = e.target.selectionStart; renderTasks(); var q = $("#q"); q.focus(); q.setSelectionRange(pos, pos); }
+    if (e.target.id === "feed-q") { feedq = e.target.value; renderFeed(); }
+  });
+
+  // ---- live: poll status.js by script tag (the one load a file:// page is allowed) ----
+  function setLive() {
+    var el = $("#live"), txt = $("#live-text");
+    if (fails >= 5 && !lastLoad) { el.className = "live static"; txt.textContent = "static snapshot (status.js not found)"; return; }
+    var age = lastLoad ? Date.now() - lastLoad : 0;
+    el.className = "live" + (fails >= 3 ? " stale" : "");
+    txt.textContent = fails >= 3 ? "not updating (" + fails + " failed polls)" : lastLoad ? "live, checked " + ago(age) : "live, connecting";
+  }
+  window.geUpdate = function (d) {
+    lastLoad = Date.now(); fails = 0;
+    if (!data || d.generated !== data.generated) {
+      prev = {}; if (data) data.nodes.forEach(function (n) { prev[n.id] = stateOf(n); });
+      data = d; renderAll(); var dot = $("#live .dot"); dot.classList.remove("beat"); void dot.offsetWidth; dot.classList.add("beat");
+    }
+    setLive();
+  };
+  function poll() {
+    var s = document.createElement("script"); s.src = "status.js?t=" + Date.now(); s.async = true;
+    var done = false; function fin(ok) { if (done) return; done = true; if (!ok) { fails++; setLive(); } s.remove(); }
+    s.onload = function () { fin(true); }; s.onerror = function () { fin(false); };
+    document.head.appendChild(s);
+  }
+
+  // ---- boot ----
+  var theme = store.get("theme", "dark"); document.documentElement.dataset.theme = theme;
+  try { data = JSON.parse($("#ge-data").textContent); } catch (e) { document.body.innerHTML = '<p style="padding:40px">This page carries no data. Run <code>ge.py render &lt;r&gt;</code> again.</p>'; throw e; }
+  renderAll(); setLive();
+  poll(); setInterval(poll, 2000);
+  ticker = setInterval(function () { renderNow(); setLive(); if (data.nodes.some(function (n) { return n.kind === "in progress" && expanded.has(n.id); })) renderTasks(); }, 30000);
+})();
+</script>
+</body>
+</html>
