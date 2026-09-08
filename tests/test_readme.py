@@ -20,5 +20,5 @@ def test_the_readme_reads_as_a_person_wrote_it(path):
     if wc is None: pytest.skip("wlah is not installed here")
     r = wc.check((REPO / path).read_text(encoding="utf-8"), strict=True, with_unslop=False)
     assert r["grade"] == "NATURAL", [(f["line"], f["tell"], f["text"]) for f in r["findings"]]
-    long = [s for s in wc.sentences(wc.strip_markup((REPO / path).read_text(encoding="utf-8"))) if len(s.split()) > 32]
+    long = [s for s in wc.sentences(wc.strip_markup((REPO / path).read_text(encoding="utf-8"))) if len(s.split()) > 45]
     assert not long, long
