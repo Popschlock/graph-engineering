@@ -1,8 +1,8 @@
-# Graph Engineering, the design (v0.3)
+# Graph Engineering, the design (v0.4)
 
 This is the contract behind the plugin, for people changing it. It names every file the plugin writes and what each line in them means, every verb of `scripts/ge.py`, what each slash command does step by step, and how the unattended runner decides what to do next. If you only want to use the plugin, the README is enough. If you want to change how it behaves, change this file first, then the code, then the tests.
 
-The numbered sections below are the spec as it was approved on 2026-09-05 and amended for 0.2 and 0.3.
+The numbered sections below are the spec as it was approved on 2026-09-05 and amended for 0.2, 0.3 and 0.4.
 
 Approved by the owner 2026-09-05. A first, project-specific version of this idea
 (a `/run-roadmap` skill and four bespoke agents, written for a single private
@@ -57,10 +57,11 @@ ge/
 <one paragraph; which task ids belong here>
 
 ## Tasks
-| id | subject | status | deps | spec | gate | commit |
-|---|---|---|---|---|---|---|
-| P1.1 | ... | open | | docs/plan.md §1 | typecheck, unit | |
-| P1.2 | ... | open | P1.1 | docs/plan.md §2 | typecheck, unit, e2e | |
+| id | subject | status | deps | spec | gate | commit | locks |
+|---|---|---|---|---|---|---|---|
+| P1.1 | READ: ... | open | | docs/plan.md §1 | | | |
+| P1.2 | ... | open | P1.1 | docs/plan.md §2 | typecheck, unit | | editor |
+| P1.3 | ... | open | P1.1 | docs/plan.md §3 | typecheck, unit, e2e | | build |
 
 ## Notes
 <anything the runner should know that is not a task: parked items, not-scheduled items>
@@ -72,7 +73,15 @@ ge/
 * `spec`: where the task is specified (a doc section, a file, or inline text).
   A node whose subject starts with `READ:` is dispatched to the reader agent.
 * `gate`: comma-separated gate NAMES from `config.md`; the verifier checks each.
-* Order matters: among ready nodes the runner takes the first in table order.
+* `locks` (0.4): what the task holds exclusively while it runs, comma-separated.
+  Names are the project's own (`editor`, `build`, `db`, `device`); `tree` is the
+  one reserved name and means exclusive use of the working tree. Two tasks that
+  share a lock never run at the same time. An empty cell means the default: a
+  task whose subject starts with `READ:` holds nothing and runs beside anything;
+  every other task holds `tree`. The word `none` is an explicit empty. A
+  seven-column table (written before 0.4) parses with every cell empty, so an
+  old roadmap keeps its serial behaviour.
+* Order matters: among dispatchable nodes the runner takes them in table order.
 
 ### 2.2 `config.md`
 
@@ -104,6 +113,7 @@ ge/
 
 ## Cadence
 review every: 3
+max parallel: 3
 ```
 
 * A gate's `success` is a regex matched against the artifact (a file glob, or
@@ -124,6 +134,9 @@ review every: 3
 * A guard's command output matched by `blocked when` means the runner waits: the
   row above holds every dispatch while a migration container is up. `blocked when`
   names the state that BLOCKS, never the healthy one.
+* `max parallel` (0.4) caps how many tasks run at once, counting the ones in
+  progress. Absent means 3. A project whose tasks all hold `tree` runs one at a
+  time whatever the cap says.
 * `Rules` replace a project's hand-pasted session preamble; the plugin ships a
   default rules block that a project's section is appended to (never ask; one
   task; finish edits before long gates; keep raw output out of context; close =
@@ -134,13 +147,20 @@ review every: 3
   agent's. (Shadowing a plugin agent by name from a project's `.claude/agents/`
   was never verified during the build, so it is not the documented route.)
 
-### 2.3 `next.md`
+### 2.3 `next.md` and `kickoffs/`
 
-The kickoff for the next node, complete for a session that knows nothing: what to
-read, what to build, the pins/tests, the protocol, the gate, how to close. First
-line: `# kickoff: <task id>`. The runner refuses a `next.md` whose id is not a
-ready node (it then builds a minimal brief from the node's `spec` and says so in
-the ledger).
+A kickoff is complete for a session that knows nothing: what to read, what to
+build, the pins/tests, the protocol, the gate, how to close. First line:
+`# kickoff: <task id>`.
+
+Since 0.4 a roadmap can have several tasks ready at once, so each has its own
+file, `ge/<r>/kickoffs/<id>.md`. The closing task agent writes one for every task
+its close made ready (`ge.py unlocked <r> <id>` names them), and the builder writes
+one for every task ready at the start. `next.md` stays as the single-lane form:
+`ge.py brief <r> <id>` reads `kickoffs/<id>.md` first, then `next.md` when its
+first line names `<id>`, then builds a minimal brief from the row's `spec` and
+says so (exit 2). A kickoff file is deleted by the close that consumes it, so
+the folder lists what is waiting.
 
 ### 2.4 `ledger.md`
 
@@ -149,7 +169,8 @@ the ledger).
 ```
 
 Events: `started`, `done`, `re-closed`, `miss` (verifier), `blocked`, `paused <reason>`,
-`resumed`, `revised`, `review`. One row per event, appended only. The `date` cell
+`resumed`, `revised`, `review`. A `started` row's outcome is the session and the
+locks the task holds (`s1 holds editor`). One row per event, appended only. The `date` cell
 of a row written by 0.3 or later is `YYYY-MM-DD HH:MM` (local time); older rows
 carry the date alone, and every reader matches on the date prefix. `started` is
 written by `ge.py start` (task = the node, outcome = the session) and is what
@@ -237,11 +258,15 @@ Python 3, stdlib only. Every skill calls it instead of reading files whole.
 ge.py list                                   roadmaps in ./ge
 ge.py validate <r>                           unknown deps, cycles, duplicate ids, bad status, next.md id not ready
 ge.py ready <r>                              ready nodes in table order (id | subject | gate)
-ge.py next <r>                               the first ready node, or "none"
+ge.py next <r>                               the first ready node, or "none" (the single-lane path)
+ge.py dispatchable <r> [--max N]             the ready nodes that can start now beside what is in progress (id | subject | gate | locks); running nodes on stderr
+ge.py unlocked <r> <id>                      the nodes that became ready because <id> closed
 ge.py node <r> <id>                          one node's fields
-ge.py brief <r>                              default rules + config Rules + next.md (the dispatch prompt)
+ge.py brief <r> [<id>]                       default rules + config Rules + the kickoff (kickoffs/<id>.md, else next.md, else a minimal brief)
+ge.py commit <r> <id> -m "<msg>" [--close] [<path>...]   git add ONLY the paths (plus the ge/<r> files with --close), commit under ge/.commit.lock, print the hash
+ge.py collide <r> <id> <other>               <id> holds `tree` from now on; ledger `revised` naming the pair; render
 ge.py guards <r>                             STOP / PAUSE(reason) / tree dirty / each config guard
-ge.py start <r> <id> <session>               status -> in progress (<session>); ledger `started`; render
+ge.py start <r> <id> <session>               status -> in progress (<session>); ledger `started`; render. Exit 1 when its locks collide with a running node
 ge.py close <r> <id> <hash> "<outcome>" [--session S]   status -> done <hash>; ledger row; render
 ge.py block <r> <id> "<why>" [--session S]   status -> blocked: <why>; ledger row; render
 ge.py ledger <r> [n] [--all]                 last n rows; `started` rows only with --all
@@ -250,7 +275,7 @@ ge.py render <r>                             status.html + status.js
 ge.py gate <r> <name>                        run a gate's command (or read its artifact) and report match/no match with captures; activity.log + render
 ge.py init <r> --goal "<t>" [--subject "<t>"] a new roadmap folder with an empty table
 ge.py add <r> --id --subject --deps --spec --gate [--after id]   a task row
-ge.py set <r> <id> --status|--deps|--spec|--gate|--subject
+ge.py set <r> <id> --status|--deps|--spec|--gate|--subject|--locks
 ```
 
 `add`, `set`, `pause`, `resume` and `stop` render too: the page is what a human
@@ -279,24 +304,37 @@ close/block/ledger, render (the HTML contains every node id), and gate matching.
 1. `ge.py guards <r>`: STOP → stop. PAUSE → act on its reason (§6) then wait
    for resume (`ScheduleWakeup` 1800 s, noop). A config guard blocked → wait the
    same way, never intervene. Dirty tree → continue; the rules tell the task
-   agent how to handle it.
-2. `ge.py next <r>` → none: stop ("nothing ready"; blocked nodes listed).
-3. `ge.py brief <r>` (refuses an id mismatch, builds a minimal brief, notes it).
-   `dry` prints and stops.
-4. `ge.py start`; dispatch `ge-task` (or `ge-reader` for `READ:` nodes) with the
-   brief verbatim plus the session link line. Wait for the notification.
-5. Dispatch `ge-verifier` with the task id, the reported hash and the node's gate
-   names only. PASS → `ge.py close`. MISS → re-dispatch `ge-task` once with the
-   misses verbatim; a second MISS → `ge.py block`. A report `blocked: human call`
-   or `blocked: guard <name>` → the agent already wrote the files; continue / wait.
-6. Every N closes (config Cadence): dispatch `ge-reviewer`; apply its moves with
-   `ge.py set`; ledger `review`; commit.
-7. Loop unless `once` or `--until <id>` reached. Say one line per close (id,
-   verdict, hash, the verifier's numbers) and one line at the stop.
+   agent how to handle it. A `lanes:` line says what is in progress and which
+   locks are held, so a session that just compacted knows the state.
+2. `ge.py dispatchable <r>` → the ready nodes that can start now, in table
+   order, up to `max parallel` minus the number running. `none` with nothing
+   running → stop ("nothing ready"; blocked nodes listed). `none` with lanes
+   running → wait for a notification.
+3. For each: `ge.py brief <r> <id>` (refuses a missing kickoff, builds a minimal
+   brief, notes it). `dry` prints every brief and stops.
+4. `ge.py start` each (a collision is refused, exit 1: skip that node this
+   round); then ONE message with every `Agent` call in it, `ge-task` or
+   `ge-reader` for `READ:` nodes, each with its brief verbatim plus the session
+   line. Wait for any notification. Say `dispatched: <ids>`.
+5. On a task's report: `closed: <id>` → dispatch `ge-verifier` for it and, in the
+   same message, dispatch whatever `ge.py dispatchable` now allows. The other
+   lanes keep running. PASS → `ge.py close`. MISS → when the first miss line
+   names another task, a lock, the editor, a build, or a file the spec does not
+   name, `ge.py collide <r> <id> <other>` first so the retry runs alone; then
+   `start` and re-dispatch once with the misses verbatim; a second MISS →
+   `ge.py block`. A report `blocked: human call` or `blocked: guard <name>` → the
+   agent already wrote the files; continue / wait.
+6. Every N closes (config Cadence, counted as closes since the last `review`
+   row): dispatch `ge-reviewer`; apply its moves and locks with `ge.py set`;
+   ledger `review`; commit.
+7. Loop unless `once` (one dispatch round and its closes) or `--until <id>`
+   reached. Say one line per close (id, verdict, hash, the verifier's numbers)
+   and one line at the stop.
 
 Rate limit or credential failure from a subagent → `ScheduleWakeup` 3600 s and
 retry the step; three in a row → stop. After a compaction: run step 1 again; the
-files say where the run is.
+files say where the run is, and the notifications of agents still running arrive
+as before.
 
 ## 6. Pause reasons
 
@@ -316,7 +354,17 @@ files say where the run is.
 `memory: project`), `ge-verifier` (opus, xhigh), `ge-reviewer` (fable, high,
 `memory: project`). Their bodies are the first version's, made project-agnostic:
 the gate comes from `config.md`'s names and the verifier runs `ge.py gate` per
-name; the close protocol is `ge.py close`/`block` plus `next.md`; the report shape is fixed.
+name; the close protocol is `ge.py close`/`block` plus a kickoff per unlocked
+node; the report shape is fixed.
+
+Since 0.4 the task agent's rules assume neighbours: touch only the files the spec
+names, treat other changes in the tree as a peer's and never stash, revert or
+commit them, commit through `ge.py commit` with the paths listed. The verifier
+checks the commit it was given and the paths that commit touched, never HEAD and
+never a repo-wide clean tree; its stale-artifact baseline is the task's `started`
+time; its floor comparison reads the previous `done` row carrying the same gate
+token. The reviewer proposes a `locks` line for every `revised` row that begins
+`collision:`.
 
 ## 8. Hook
 
@@ -367,11 +415,12 @@ bespoke per-project agents retired, and its own `/run-roadmap` skill replaced by
 against a fictional project, so the shape is readable without any one project's
 details.
 
-## 11. Non-goals for 0.3
+## 11. Non-goals for 0.4
 
-Parallel dispatch of independent ready nodes (designed for: `ready` returns
-several; the runner takes one), a headless loop, cloud routines, a server behind
-the dashboard (it is a file, polled), any store other than Markdown files.
+A git worktree per task (the projects this serves, Unreal and Perforce, cannot be
+copied), Perforce-aware commits (a project's rules say p4 where p4 applies), a
+headless loop, cloud routines, a server behind the dashboard (it is a file,
+polled), any store other than Markdown files.
 
 ## 12. What 0.2 changed
 
@@ -413,3 +462,26 @@ shown a node in progress.
 5. The runner re-marks a node `in progress` before the fix pass after a verifier
    MISS, so the fix pass is amber too and closes as `re-closed` (§5).
 6. `ge/.gitignore` for the two generated files, written by the first render.
+
+## 14. What 0.4 changed
+
+Parallel tasks, off the owner's reading of a run that spent 4h17m on 11 tasks
+back to back, four of them reads that shared nothing.
+
+1. The roadmap table gained `locks` (§2.1): what a task holds while it runs.
+   `READ:` tasks hold nothing by default and everything else holds `tree`, so
+   old roadmaps keep their behaviour and a builder opts a row into parallel by
+   naming what it really needs.
+2. `ge.py dispatchable`, `unlocked`, `commit` and `collide` (§3); `start` refuses
+   a collision; `brief` takes an id; `config.md` gained `max parallel` (§2.2).
+3. Kickoffs are one file per ready task under `kickoffs/` (§2.3), written by the
+   agent whose close unlocked them.
+4. Commits go through `ge.py commit`, which adds only the paths it is given and
+   takes `ge/.commit.lock`, so two agents in one tree cannot sweep each other's
+   files or race the index.
+5. The runner dispatches every dispatchable node in one message and verifies
+   each close while the other lanes run (§5). A miss that names a peer retries
+   the task alone and records the pair; the reviewer proposes the lock (§7).
+6. `/ge-build-roadmap` plans before it writes: it reads the project, asks what
+   only one task may use at a time, and sets deps to real data dependencies
+   instead of chaining a phase (§4).
