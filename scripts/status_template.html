@@ -160,6 +160,7 @@ input.search { background: var(--surface); border: 1px solid var(--line2); color
 .row.expanded .row-h .rsub { white-space: normal; }
 .row-h .rmeta { color: var(--muted); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .row-h .rmeta .st { color: var(--c); font-weight: 600; }
+.row-h .rmeta .lock { font-family: var(--mono); font-size: 11px; border: 1px solid var(--line2); border-radius: 4px; padding: 0 5px; color: var(--muted); }
 .row-h .chev { width: 16px; height: 16px; color: var(--faint); transition: transform .18s; }
 .row.expanded .chev { transform: rotate(180deg); }
 .row.flash .row-h { animation: rowflash 1.4s ease-out 1; }
@@ -322,7 +323,9 @@ footer { padding: 18px 0 40px; color: var(--faint); font-size: 12.5px; display: 
       var act = activityFor(n), last = act[act.length - 1];
       if (last && last.state === "running") facts.push('<span class="gate"><span class="spin"></span>gate <b>' + h(last.name) + "</b> running" + (since(last.ts) != null ? " for <b>" + mins(since(last.ts)) + "</b>" : "") + "</span>");
       else if (last) facts.push("gate <b>" + h(last.name) + "</b> " + (last.state === "MATCH" ? "passed" : "failed") + (last.detail ? " (" + h(last.detail) + ")" : ""));
-      if (ip.length > 1) facts.push("and " + (ip.length - 1) + " more in progress");
+      ip.slice(1, 4).forEach(function (o) { var mo = since(o.started); facts.push('beside it <b class="mono">' + h(o.id) + "</b>" + (mo != null ? " (" + mins(mo) + ")" : "") + (o.locks.length ? ", holds " + h(o.locks.join(", ")) : "")); });
+      if (ip.length > 4) facts.push("and " + (ip.length - 4) + " more");
+      if (n.locks && n.locks.length) facts.push("holds <b>" + h(n.locks.join(", ")) + "</b>");
     } else if (blocked.length && !ready.length) {
       head = '<span class="id blocked">' + h(blocked[0].id) + "</span>" + h(blocked[0].subject); headLen = blocked[0].subject.length; headTitle = blocked[0].subject;
       facts.push('<span class="reason">' + h(blocked[0].reason || blocked[0].status) + "</span>");
@@ -443,6 +446,7 @@ footer { padding: 18px 0 40px; color: var(--faint); font-size: 12.5px; display: 
     else if (n.ready) m.push('<span class="st">ready</span>');
     else if (n.kind === "skipped") m.push("skipped");
     else m.push("waits on " + n.deps.filter(function (d) { var x = byId(d); return x && x.kind !== "done"; }).map(h).join(", "));
+    if (n.locks && n.locks.length && n.kind !== "done" && n.kind !== "skipped") m.unshift('<span class="lock" title="holds while running">' + h(n.locks.join(", ")) + "</span>");
     return m.join(" &nbsp;·&nbsp; ");
   }
   function pills(ids) { return ids.length ? ids.map(function (d) { var x = byId(d); var st = x ? stateOf(x) : "open"; return '<span class="pill link" data-go="' + h(d) + '" style="--c:var(--' + st + ')">' + h(d) + "</span>"; }).join("") : '<span class="empty" style="padding:0">none</span>'; }
@@ -455,6 +459,7 @@ footer { padding: 18px 0 40px; color: var(--faint); font-size: 12.5px; display: 
     if (n.commit) L += '<dt>Commit</dt><dd class="mono">' + h(n.commit) + "</dd>";
     L += "<dt>Phase</dt><dd>" + h(n.phase || "other") + "</dd>";
     L += "<dt>Depends on</dt><dd>" + pills(n.deps) + "</dd><dt>Unblocks</dt><dd>" + pills(n.dependents) + "</dd>";
+    L += "<dt>Holds</dt><dd>" + (n.locks && n.locks.length ? h(n.locks.join(", ")) + " (no other task holding one of these runs at the same time)" : "nothing; runs beside anything") + "</dd>";
     L += "<dt>Spec</dt><dd>" + h(n.spec || "—") + "</dd>";
     L += "<dt>Gates</dt><dd>" + (n.gates.length ? n.gates.map(function (g) { var x = gates[g]; return "<div><b>" + h(g) + "</b>" + (x ? ' <span class="gatecmd">' + h(x.command) + (x.floor ? " (floor " + h(x.floor) + ")" : "") + "</span>" : "") + "</div>"; }).join("") : "none") + "</dd>";
     L += "</dl></div></div>";

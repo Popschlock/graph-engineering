@@ -9,5 +9,5 @@ description: Stop a roadmap. Writes a STOP file so the runner dispatches nothing
 
 1. `GE stop <r>` — writes `ge/<r>/STOP`.
 2. `GE render <r>` — regenerates `ge/<r>/status.html` so an open tab is current as of the stop.
-3. `git add ge/<r> && git commit -m "ge(<r>): stop"`.
+3. `GE commit <r> stop --close -m "ge(<r>): stop"`.
 4. Say one line: the runner stops dispatching at its next boundary; a running node finishes its commit; `/ge-resume-roadmap <r>` clears the STOP.

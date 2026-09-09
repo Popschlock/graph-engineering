@@ -28,7 +28,7 @@ def test_the_two_manifests_carry_the_same_version():
     plugin = json.loads(read(".claude-plugin/plugin.json"))
     market = json.loads(read(".claude-plugin/marketplace.json"))
     entries = [p for p in market["plugins"] if p["name"] == plugin["name"]]
-    assert len(entries) == 1 and entries[0]["version"] == plugin["version"] == "0.3.3"
+    assert len(entries) == 1 and entries[0]["version"] == plugin["version"] == "0.4.0"
 
 def test_claudeignore_names_the_caches_and_never_the_package():
     """A directory source is installed by copying the checkout. Whether the installer honours this file is
@@ -49,10 +49,23 @@ def test_build_roadmap_reaches_the_config_and_init_it_writes():
     assert "floor" in t and "ratchet" in t, "and it has to ask the human for the number"
     assert '--goal "<goal>" --subject "<subject>"' in t, "init's subject has no other caller"
 
-def test_build_and_revise_are_told_about_nexts_stderr_lines():
-    """`ge.py next` writes `in progress:` lines on stderr. /ge-run-roadmap already knew; a skill that reads
-    the id off a 2>&1 capture and does not would take `in progress:` for the node's id."""
+def test_the_skills_read_dispatchable_and_know_its_stderr_lines():
+    """`ge.py dispatchable` writes `running:` lines on stderr and `ge.py next` writes `in progress:` lines. A skill
+    that reads an id off a 2>&1 capture and does not know that would take a stderr line for the node's id."""
     for skill in ("ge-build-roadmap", "ge-revise-roadmap", "ge-run-roadmap"):
         t = read(f"skills/{skill}/SKILL.md")
-        assert "stderr" in t.lower() and "in progress:" in t, skill
-        assert "stranded" in t, skill
+        assert "GE dispatchable" in t and "stderr" in t.lower() and "running:" in t, skill
+    for skill in ("ge-revise-roadmap", "ge-run-roadmap"):
+        assert "stranded" in read(f"skills/{skill}/SKILL.md"), skill
+
+def test_the_close_protocol_goes_through_ge_commit_everywhere():
+    """A task agent that runs `git add ge` beside another lane sweeps the peer's marks into its commit."""
+    for f in ("skills/ge-run-roadmap/SKILL.md", "skills/ge-build-roadmap/SKILL.md", "skills/ge-revise-roadmap/SKILL.md",
+              "skills/ge-pause-roadmap/SKILL.md", "skills/ge-resume-roadmap/SKILL.md", "skills/ge-stop-roadmap/SKILL.md",
+              "skills/ge-review-roadmap/SKILL.md", "agents/ge-task.md", "agents/ge-reader.md"):
+        t = read(f); assert "commit" in t and "git add ge" not in t and "git add -A" not in t, f
+    rules = read("scripts/ge.py").split("DEFAULT_RULES")[1].split('"""')[1]
+    assert "ge.py commit {r} {id}" in rules and "never `git add ge`" in rules and "git add ge &&" not in rules
+    assert "kickoffs/" in read("agents/ge-task.md") and "unlocked" in read("agents/ge-verifier.md")
+    assert "locks:" in read("agents/ge-reviewer.md") and "--locks" in read("skills/ge-revise-roadmap/SKILL.md")
+    assert "EnterPlanMode" in read("skills/ge-build-roadmap/SKILL.md") and "--locks" in read("skills/ge-build-roadmap/SKILL.md")

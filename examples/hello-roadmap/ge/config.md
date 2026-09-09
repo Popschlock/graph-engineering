@@ -22,3 +22,4 @@ Python 3, stdlib only. One module `hello.py`; its tests in `test_hello.py`; `pyt
 
 ## Cadence
 review every: 3
+max parallel: 3

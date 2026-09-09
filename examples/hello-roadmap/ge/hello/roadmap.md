@@ -8,11 +8,11 @@ A `hello.py` that greets, can shout, and runs from the command line, each step p
 H1, H2 and H3, in that order.
 
 ## Tasks
-| id | subject | status | deps | spec | gate | commit |
-|---|---|---|---|---|---|---|
-| H1 | `greet(name)` returns `hello, <name>` | open | | inline: one function, one test | pytest | |
-| H2 | `shout(name)` returns `greet(name).upper() + "!"` | open | H1 | inline: one function, one test | pytest | |
-| H3 | `python hello.py <name>` prints `shout(name)` | open | H2 | inline: a `__main__` block, one subprocess test | pytest | |
+| id | subject | status | deps | spec | gate | commit | locks |
+|---|---|---|---|---|---|---|---|
+| H1 | `greet(name)` returns `hello, <name>` | open | | inline: one function, one test | pytest | | |
+| H2 | `shout(name)` returns `greet(name).upper() + "!"` | open | H1 | inline: one function, one test | pytest | | |
+| H3 | `python hello.py <name>` prints `shout(name)` | open | H2 | inline: a `__main__` block, one subprocess test | pytest | | |
 
 ## Notes
-H1 is already written, so a first `/ge-run-roadmap hello once` closes it fast and shows the whole cycle.
+H1 is already written, so a first `/ge-run-roadmap hello once` closes it fast and shows the whole cycle. The three tasks edit the same two files, so each holds `tree` (the empty cell) and they run one at a time; a roadmap whose tasks touch different things would name narrower locks and run them together.

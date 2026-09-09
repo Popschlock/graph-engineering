@@ -4,7 +4,7 @@ Run from the project root (or with --root <dir>): python ge.py <command> [args].
 Exit 0 ok, 1 not found/invalid, 2 validation failure (reasons printed).
 Sections: 1 model+parse | 2 graph | 3 writers | 4 config+gate+guards+brief | 5 render | 6 pause+open | 7 cli
 """
-import argparse, datetime, glob, json, os, re, signal, subprocess, sys, time
+import argparse, datetime, glob, json, os, re, shutil, signal, subprocess, sys, time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -14,6 +14,7 @@ ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 @dataclass
 class Node:
     id: str; subject: str; status: str; deps: list; spec: str; gate: list; commit: str
+    locks: list = field(default_factory=list)  # 0.4: what the task holds while it runs; [] = the default
     line: int = -1  # index into Roadmap.lines
 
 @dataclass
@@ -55,8 +56,8 @@ def parse_roadmap(path):
         if not l.lstrip().startswith("|"): continue
         if not head: head = True; continue
         if is_sep(l): continue
-        c = cells(l) + [""] * 7
-        nodes.append(Node(c[0], c[1], c[2], split_list(c[3]), c[4], split_list(c[5]), c[6], i))
+        c = cells(l) + [""] * 8  # a seven-column table (before 0.4) reads with an empty locks cell
+        nodes.append(Node(c[0], c[1], c[2], split_list(c[3]), c[4], split_list(c[5]), c[6], split_list(c[7]), i))
     phases = []
     a, b = section(lines, "## Phases")
     for i in range(max(a, 0), max(b, 0)):
@@ -84,6 +85,48 @@ def is_ready(n, ids):
     return kind(n.status) == "open" and all(d in ids and kind(ids[d].status) == "done" for d in n.deps)
 def ready(rm): ids = by_id(rm); return [n for n in rm.nodes if is_ready(n, ids)]
 def next_node(rm): r = ready(rm); return r[0] if r else None
+
+def effective_locks(n):
+    """The locks a task holds while it runs. The cell wins; `none` is an explicit empty; otherwise a READ:
+    task holds nothing and every other task holds `tree` (exclusive use of the working tree), so a roadmap
+    written before locks existed keeps running one task at a time."""
+    if n.locks: return [] if n.locks == ["none"] else n.locks
+    return [] if n.subject.strip().upper().startswith("READ:") else ["tree"]
+
+def running(rm): return [n for n in rm.nodes if kind(n.status) == "in progress"]
+def held(rm): return {l for n in running(rm) for l in effective_locks(n)}
+
+def clash(a, b):
+    """-> the lock names two lock sets fight over. `tree` means the whole working tree, so a task holding it
+    fights with every task that holds anything at all; two tasks holding nothing never fight."""
+    a, b = set(a), set(b)
+    if "tree" in a and b: return sorted(b if "tree" not in b else {"tree"})
+    if "tree" in b and a: return sorted(a)
+    return sorted(a & b)
+
+def dispatchable(rm, max_parallel=3):
+    """The ready nodes that can start now: in table order, none fighting a running node or one chosen before
+    it over a lock, up to max_parallel minus the number already running."""
+    room = max_parallel - len(running(rm)); out = []; taken = [effective_locks(x) for x in running(rm)]
+    for n in ready(rm):
+        if len(out) >= room: break
+        locks = effective_locks(n)
+        if any(clash(locks, t) for t in taken): continue
+        out.append(n); taken.append(locks)
+    return out
+
+def collision(rm, n):
+    """-> ["<running id> (<locks fought over>)", ...] for every running node n cannot run beside, or []"""
+    mine = effective_locks(n); out = []
+    for x in running(rm):
+        shared = clash(mine, effective_locks(x))
+        if shared: out.append(f"{x.id} ({', '.join(shared)})")
+    return out
+
+def unlocked(rm, nid):
+    """The nodes that became ready because nid closed: its dependents whose every dep is done."""
+    ids = by_id(rm)
+    return [n for n in rm.nodes if nid in n.deps and is_ready(n, ids)]
 
 def find_cycle(rm):
     ids = by_id(rm); state = {}; stack = []
@@ -155,20 +198,30 @@ def read_calls(r):
     return items("## Open"), items("## Decided")
 
 # ---- 3. writers -------------------------------------------------------------
-ROADMAP_TMPL = "# {r} — {subject}\n\n## Goal\n{goal}\n\n## Phases\n\n## Tasks\n| id | subject | status | deps | spec | gate | commit |\n|---|---|---|---|---|---|---|\n\n## Notes\n"
+ROADMAP_TMPL = "# {r} — {subject}\n\n## Goal\n{goal}\n\n## Phases\n\n## Tasks\n| id | subject | status | deps | spec | gate | commit | locks |\n|---|---|---|---|---|---|---|---|\n\n## Notes\n"
 LEDGER_HEAD = "| date | session | task | event | outcome | commit |\n|---|---|---|---|---|---|\n"
 CALLS_TMPL = "# calls — {r}\n\n## Open\n\n## Decided\n"
 
 def esc_cell(s): return (s or "").replace("|", "\\|").replace("\n", " ")
 def fmt_row(n):
     return (f"| {esc_cell(n.id)} | {esc_cell(n.subject)} | {esc_cell(n.status)} | {', '.join(n.deps)} | "
-            f"{esc_cell(n.spec)} | {', '.join(n.gate)} | {n.commit} |")
-def save(rm): wtext(rm.path, "\n".join(rm.lines))
+            f"{esc_cell(n.spec)} | {', '.join(n.gate)} | {n.commit} | {', '.join(n.locks)} |")
+
+def widen_header(rm):
+    """A seven-column table gains the locks column the first time a row is written with eight cells."""
+    a, b = section(rm.lines, "## Tasks"); head = None
+    for i in range(max(a, 0), max(b, 0)):
+        if rm.lines[i].lstrip().startswith("|"): head = i; break
+    if head is None or len(cells(rm.lines[head])) >= 8: return
+    rm.lines[head] = rm.lines[head].rstrip() + " locks |"
+    if head + 1 < len(rm.lines) and is_sep(rm.lines[head + 1]): rm.lines[head + 1] = rm.lines[head + 1].rstrip() + "---|"
+
+def save(rm): widen_header(rm); wtext(rm.path, "\n".join(rm.lines))
 
 def set_field(rm, nid, field_name, value):
     n = by_id(rm).get(nid)
     if n is None: raise KeyError(nid)
-    setattr(n, field_name, split_list(value) if field_name in ("deps", "gate") else value)
+    setattr(n, field_name, split_list(value) if field_name in ("deps", "gate", "locks") else value)
     rm.lines[n.line] = fmt_row(n); save(rm)
 
 def add_node(rm, n, after=None):
@@ -215,10 +268,16 @@ def read_ledger(r, n=None, started=True):
     return rows[-n:] if n else rows
 
 def start(r, nid, session):
-    """status -> in progress (<session>); ledger `started`; render. The render is the 0.3 fix: without it the
-    page was rebuilt when a node turned green and never while it was amber."""
-    set_field(load(r), nid, "status", f"in progress ({session})"); append_ledger(r, nid, "started", session, "", session)
-    render_to_file(r)
+    """status -> in progress (<session>); ledger `started` naming the locks held; render. -> the running ids
+    it collides with, in which case NOTHING is written: the runner cannot start a collision by mistake.
+    The render is the 0.3 fix: without it the page was rebuilt when a node turned green and never while amber."""
+    rm = load(r); n = by_id(rm).get(nid)
+    if n is None: raise KeyError(nid)
+    hit = collision(rm, n)
+    if hit: return hit
+    set_field(rm, nid, "status", f"in progress ({session})")
+    append_ledger(r, nid, "started", f"{session} holds {', '.join(effective_locks(n)) or 'none'}", "", session)
+    render_to_file(r); return []
 
 def close(r, nid, h, outcome, session=""):
     """status -> done <hash>, commit column, ledger row, render. -> "" on a first close, "already" when the
@@ -233,6 +292,8 @@ def close(r, nid, h, outcome, session=""):
     n.status, n.commit = f"done {h}", h; rm.lines[n.line] = fmt_row(n); save(rm)
     if prior: append_ledger(r, nid, "re-closed", f"{outcome} (was {prior[-1][5] or 'no hash'})", h, session)
     else: append_ledger(r, nid, "done", outcome, h, session)
+    k = rdir(r) / "kickoffs" / f"{nid}.md"
+    if k.is_file(): k.unlink()  # consumed: the folder lists what is waiting
     render_to_file(r)
     return "re-closed" if prior else ""
 
@@ -248,7 +309,7 @@ class Guard: name: str; command: str; blocked_when: str
 @dataclass
 class Config:
     gates: dict = field(default_factory=dict); guards: dict = field(default_factory=dict)
-    rules: str = ""; tiers: dict = field(default_factory=dict); review_every: int = 3
+    rules: str = ""; tiers: dict = field(default_factory=dict); review_every: int = 3; max_parallel: int = 3
 
 def unquote(c): return c[1:-1] if len(c) >= 2 and c[0] == c[-1] == "`" else c
 
@@ -277,6 +338,8 @@ def parse_config(path):
     for l in lines[max(a, 0):max(b, 0)]:
         m = re.match(r"review every:\s*(\d+)", l.strip())
         if m: cfg.review_every = int(m.group(1))
+        m = re.match(r"max parallel:\s*(\d+)", l.strip())
+        if m: cfg.max_parallel = max(1, int(m.group(1)))
     return cfg
 
 GATE_TIMEOUT, GUARD_TIMEOUT = 3600, 30
@@ -361,6 +424,10 @@ def guards(r, cfg):
     yield "stop: PRESENT" if (rdir(r) / "STOP").is_file() else "stop: absent"
     ps = pause_state(r); yield f"pause: {ps[0]} | {ps[1]}" if ps else "pause: absent"
     try:
+        rm = load(r); run = running(rm)
+        yield f"lanes: {len(run)} in progress, holding {', '.join(sorted(held(rm))) or 'none'}"
+    except Exception as e: yield f"lanes: UNKNOWN ({type(e).__name__}: {e})"
+    try:
         st = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
         if st.returncode: yield f"tree: UNKNOWN (git rc={st.returncode})"
         else: yield "tree: DIRTY" if st.stdout.strip() else "tree: clean"
@@ -377,33 +444,82 @@ DEFAULT_RULES = """# Graph Engineering — the unattended rules (prepended to ev
 
 You are an unattended session of the project at `{root}`, working roadmap `{r}` (`ge/{r}/roadmap.md`). Nobody is watching. Every read or write of the roadmap, the ledger and the status page goes through `ge.py` = `"{py}" "{ge}"`, run from `{root}`; you never edit `roadmap.md`, `ledger.md` or `status.html` by hand (you do write `next.md`, `calls.md` and `summaries/`). Read `ge/{r}/roadmap.md` whole before the kickoff below, then the kickoff, then work. These rules bind over anything the kickoff says that assumes a person is present:
 
-1. **Never ask a question.** A decision only the human can make goes under `## Open` in `ge/{r}/calls.md` (both sides, one line each); then `ge.py block {r} {id} "human call"`, write `next.md` for `ge.py next {r}`'s node (rule 7d), commit, and report `blocked: human call`.
-2. **ONE task**: `{id}`, which the kickoff below is. Its row already reads `in progress`; leave it. Nothing from other rows.
+1. **Never ask a question.** A decision only the human can make goes under `## Open` in `ge/{r}/calls.md` (both sides, one line each); then `ge.py block {r} {id} "human call"`, write the kickoffs rule 7d names, commit with `ge.py commit {r} {id} --close -m "ge({r}): block {id}"`, and report `blocked: human call`.
+2. **ONE task**: `{id}`, which the kickoff below is. Its row already reads `in progress`; leave it. Other rows may be in progress beside you: other agents are working in this same tree at the same time. Touch only the files your spec names, never a peer's. You hold: {locks} (in the brief header this reads as `you hold: {locks}`). Anything not in that list (an editor, a build, a database) may be in use by a peer, so do not open, close or restart it unless your locks include it.
 3. **Finish every edit, THEN run the long gates.** A gate is a name in `ge/config.md`; run each gate the row names with `ge.py gate {r} <name>` on the closing tree and keep the captures it prints for the commit message and your report. `NO MATCH` is not a close: fix and re-run, or block.
 4. **Guards.** First run `ge.py guards {r}`. `stop: PRESENT` means stop now and report `stopped`. A `guard <name>: BLOCKED` at any point means stop after writing `next.md` and report `blocked: guard <name>`; never clear a guard yourself. A `tree: UNKNOWN (...)` or `guard <name>: ERROR ...` line is a check that could not run, and it fails closed: it blocks exactly like `BLOCKED` — stop the same way and report `blocked: guard tree` for the tree line, `blocked: guard <name>` for a named guard.
 5. **Keep raw output out of your context**: `| tail`, `| grep`, background long commands and read their result line; reads that span many files go to a subagent whose short report you keep. Write-ups go to files, not to your report.
-6. **A dirty tree at start** (`git status --porcelain`): if every change is under `ge/`, it is the runner's marks (status.html, ledger rows, your row, ge/.gitignore); continue — your close commit's `git add ge` carries them. Anything else is a cut-off session: finish what is finishable under its kickoff or `git stash` it with `ge.py event {r} revised "stashed: <what>"`, then take the task.
-7. **Close, in this order:** (a) memory updated where a durable fact or a trap was found; (b) ONE work commit whose message quotes each gate's captures and ends with the session link you were given; (c) `ge.py close {r} {id} <hash> "<outcome>" --session <your session id>`, where `<outcome>` STARTS with one `<gate>=<captures>` token per gate the row names, separated by spaces, then `; ` and a one-line summary — `pytest=41 e2e=12; the close is idempotent now` — because the verifier reads those tokens back out of the ledger; (d) `ge.py next {r}`; write `ge/{r}/next.md` for that node: first line `# kickoff: <its id>` (or `# kickoff: none`), then a COMPLETE kickoff for a session that knows nothing — what to read, what to build, the pins or tests, its gate names, how to close; (e) `git add ge && git commit -m "ge({r}): close {id}; next <its id>"`.
-8. **Your report**, under 150 words, exactly: `commit: <work hash>`; one line per gate `gate <name>: <captures>`; `closed: {id}` or `blocked: <why>` or `stopped`; `next: <id>`. Audit each line against a tool result first; an unverified claim is written as unverified.
+6. **A dirty tree is normal.** Changes under `ge/` are the runner's marks. Any other change you did not make belongs to a task running beside you: do not stash, revert, commit or read it as yours, and do not report it. Only when `ge.py guards {r}` says `lanes: 0 in progress` and the changes touch files your spec names is it a cut-off session: finish what is finishable under your kickoff or `git stash` it with `ge.py event {r} revised "stashed: <what>"`, then take the task.
+7. **Close, in this order:** (a) memory updated where a durable fact or a trap was found; (b) ONE work commit through `ge.py commit {r} {id} -m "<message>" <the files you changed>` — it adds ONLY the paths you list and takes the commit lock, so list every file you changed and nothing else; the message quotes each gate's captures and ends with the session link you were given; never `git add -A`, never `git add ge`, never `git commit` yourself; (c) `ge.py close {r} {id} <hash> "<outcome>" --session <your session id>`, where `<outcome>` STARTS with one `<gate>=<captures>` token per gate the row names, separated by spaces, then `; ` and a one-line summary — `pytest=41 e2e=12; the close is idempotent now` — because the verifier reads those tokens back out of the ledger; (d) `ge.py unlocked {r} {id}` prints the tasks your close made ready; for EACH, write `ge/{r}/kickoffs/<its id>.md`: first line `# kickoff: <its id>`, then a COMPLETE kickoff for a session that knows nothing — what to read, what to build, the pins or tests, its gate names, how to close (when it prints nothing, write nothing); (e) `ge.py commit {r} {id} --close -m "ge({r}): close {id}; unlocked <ids or none>"`.
+8. **Your report**, under 150 words, exactly: `commit: <work hash>`; one line per gate `gate <name>: <captures>`; `closed: {id}` or `blocked: <why>` or `stopped`; `unlocked: <ids or none>`. Audit each line against a tool result first; an unverified claim is written as unverified.
 """
 
 def minimal_brief(rm, n):
     return (f"# kickoff: {n.id}\n\nTask {n.id}: {n.subject}\n\nRead the spec first: {n.spec}\nBuild exactly what it states for {n.id}, nothing of other tasks.\n"
             f"Deps already done: {', '.join(n.deps) or 'none'}. Gate names (ge/config.md): {', '.join(n.gate) or 'none'}.\n"
-            f"This brief was built from the roadmap row because next.md did not name {n.id}; write next.md properly at your close (rule 7d).\n")
+            f"This brief was built from the roadmap row because no kickoff named {n.id}; write the kickoffs properly at your close (rule 7d).\n")
 
-def brief(r):
-    """-> (text, code): 0 = next.md matched the ready node; 2 = mismatch or missing, minimal brief built; 1 = nothing ready"""
-    rm = load(r); n = next_node(rm)
-    if n is None: return "nothing ready", 1
-    nx = rdir(r) / "next.md"; body, code = "", 2
+def kickoff_for(r, nid):
+    """-> the kickoff text for nid: kickoffs/<nid>.md, else next.md when its first line names nid, else ''"""
+    k = rdir(r) / "kickoffs" / f"{nid}.md"
+    if k.is_file(): return k.read_text(encoding="utf-8")
+    nx = rdir(r) / "next.md"
     if nx.is_file():
         body = nx.read_text(encoding="utf-8"); m = re.match(r"#\s*kickoff:\s*(\S+)", body.split("\n", 1)[0])
-        if m and m.group(1) == n.id: code = 0
+        if m and m.group(1) == nid: return body
+    return ""
+
+def brief(r, nid=None):
+    """-> (text, code): 0 = a kickoff named the node; 2 = none did, minimal brief built; 1 = nothing ready (or
+    nid is not a ready node). Without nid, the first ready node, as before 0.4."""
+    rm = load(r); n = by_id(rm).get(nid) if nid else next_node(rm)
+    if n is None or (nid and not is_ready(n, by_id(rm))): return "nothing ready" if not nid else f"{nid} is not ready", 1
+    body = kickoff_for(r, n.id); code = 0 if body else 2
     if code: body = minimal_brief(rm, n)
     cfg = parse_config(ge_root() / "config.md")
-    rules = DEFAULT_RULES.format(root=os.getcwd(), r=r, ge=Path(__file__).resolve(), id=n.id, py=sys.executable)
+    rules = DEFAULT_RULES.format(root=os.getcwd(), r=r, ge=Path(__file__).resolve(), id=n.id, py=sys.executable,
+                                 locks=", ".join(effective_locks(n)) or "none")
     return rules + ("\n## Project rules\n" + cfg.rules + "\n" if cfg.rules else "") + "\n---\n\n" + body, code
+
+# ---- 4b. commit + collide ----------------------------------------------------
+COMMIT_WAIT = 60.0
+
+def commit(r, nid, message, paths, close=False):
+    """git add ONLY the paths (and, with close, this roadmap's own files), then commit, under ge/.commit.lock
+    (a directory: mkdir is atomic on every platform). Two agents in one tree can then commit without one
+    sweeping the other's files into its commit or racing git's index. -> (hash, error)."""
+    lock = ge_root() / ".commit.lock"; t0 = time.time()
+    while True:
+        try: lock.mkdir(); break
+        except FileExistsError:
+            if time.time() - t0 > COMMIT_WAIT: return "", f"ge/.commit.lock held for {int(COMMIT_WAIT)}s; remove it if no commit is running"
+            time.sleep(0.2)
+    try:
+        add = list(paths)
+        if close:
+            d = rdir(r)
+            add += [str(d / f) for f in ("roadmap.md", "ledger.md", "calls.md", "status.html", "next.md") if (d / f).is_file()]
+            add += [str(x) for x in sorted((d / "kickoffs").glob("*.md"))] if (d / "kickoffs").is_dir() else []
+            add += [str(ge_root() / ".gitignore")] if (ge_root() / ".gitignore").is_file() else []
+        if not add: return "", "nothing to add: list the files you changed"
+        st = subprocess.run(["git", "add", "-A", "--", *add], capture_output=True, text=True)
+        if st.returncode: return "", "git add: " + (st.stderr or st.stdout).strip()
+        for attempt in range(5):  # git's own index.lock from a concurrent non-ge commit
+            st = subprocess.run(["git", "commit", "-q", "-m", message], capture_output=True, text=True)
+            if st.returncode == 0 or "index.lock" not in (st.stderr + st.stdout): break
+            time.sleep(0.5)
+        if st.returncode: return "", "git commit: " + (st.stderr or st.stdout).strip()
+        h = subprocess.run(["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+        return h, ""
+    finally:
+        try: lock.rmdir()
+        except OSError: pass
+
+def collide(r, nid, other):
+    """nid holds `tree` from now on (its retry runs alone); ledger revised naming the pair; render"""
+    rm = load(r); set_field(rm, nid, "locks", "tree")
+    append_ledger(r, "-", "revised", f"collision: {nid} with {other}; {nid} holds tree and retries alone")
+    render_to_file(r)
 
 # ---- 5. render --------------------------------------------------------------
 COLOURS = {"open": "#9aa0a6", "ready": "#3b82f6", "in progress": "#f59e0b", "done": "#22c55e",
@@ -501,7 +617,16 @@ def split_outcome(outcome):
     if not gates: return {"gates": [], "text": outcome}
     return {"gates": gates, "text": text.strip() if sep else ""}
 
-def status_data(rm, cfg, ledger_rows, calls_open, hold="", decided=(), activity=(), kickoff=("", "")):
+def read_kickoffs(r):
+    """-> {id: body} for every kickoffs/<id>.md"""
+    d = rdir(r) / "kickoffs"
+    if not d.is_dir(): return {}
+    out = {}
+    for f in sorted(d.glob("*.md")):
+        body = f.read_text(encoding="utf-8", errors="replace"); out[f.stem] = body.partition("\n")[2].strip()
+    return out
+
+def status_data(rm, cfg, ledger_rows, calls_open, hold="", decided=(), activity=(), kickoff=("", ""), kickoffs=None):
     """ONE JSON document of the roadmap: what the page draws, embedded in status.html and mirrored to status.js"""
     pos, bands = layout(rm); rid = {n.id for n in ready(rm)}; ids = by_id(rm)
     rows = [{"ts": x[0], "session": x[1], "task": x[2], "event": x[3], "outcome": x[4], "commit": x[5]}
@@ -528,7 +653,8 @@ def status_data(rm, cfg, ledger_rows, calls_open, hold="", decided=(), activity=
                       "phase": phase_of(rm, n.id), "col": c, "row": rw, "session": m.group(1) if m else "",
                       "reason": reason, "started": started, "finished": finished, "minutes": minutes, "history": hist,
                       "summary": split_outcome(done_row["outcome"]) if done_row and k == "done" else None,
-                      "kickoff": kickoff[1] if kickoff[0] == n.id else ""})
+                      "locks": effective_locks(n),
+                      "kickoff": (kickoff[1] if kickoff[0] == n.id else "") or (kickoffs.get(n.id, "") if kickoffs else "")})
     counts = {k: 0 for k in ("open", "ready", "in progress", "done", "blocked", "skipped")}
     for x in nodes: counts["ready" if x["ready"] else x["kind"]] = counts.get("ready" if x["ready"] else x["kind"], 0) + 1
     ip = [x["id"] for x in nodes if x["kind"] == "in progress"]
@@ -539,7 +665,7 @@ def status_data(rm, cfg, ledger_rows, calls_open, hold="", decided=(), activity=
     return {"version": 1, "name": rm.name, "subject": (rm.lines[0].split("—", 1)[1].strip() if rm.lines and "—" in rm.lines[0] else ""),
             "goal": goal(rm), "generated": datetime.datetime.now().isoformat(timespec="seconds"), "project": Path.cwd().name,
             "state": state, "hold": {"kind": hk, "reason": reason, "note": note, "text": hold} if hk else None,
-            "counts": counts, "total": len(nodes), "review_every": cfg.review_every,
+            "counts": counts, "total": len(nodes), "review_every": cfg.review_every, "max_parallel": cfg.max_parallel,
             "gates": [{"name": g.name, "command": g.command, "success": g.success, "artifact": g.artifact, "floor": g.floor}
                       for g in cfg.gates.values()],
             "phases": [{"id": pid, "title": t, "text": x} for pid, t, x in rm.phases],
@@ -581,7 +707,7 @@ def render_to_file(r):
     """status.html + status.js, and ge/.gitignore for the two generated files where it is absent"""
     rm = load(r); op, dec = read_calls(r)
     data = status_data(rm, parse_config(ge_root() / "config.md"), read_ledger(r), op, hold_line(r),
-                       decided=dec, activity=read_activity(r), kickoff=read_kickoff(r))
+                       decided=dec, activity=read_activity(r), kickoff=read_kickoff(r), kickoffs=read_kickoffs(r))
     html = render(rm, None, None, None, data=data)
     gi = ge_root() / ".gitignore"
     if not gi.exists(): wtext(gi, GITIGNORE)
@@ -633,12 +759,15 @@ def main(argv=None):
         for k, v in opts.items(): p.add_argument("--" + k, default=v)
         return p
     sub("list"); sub("validate", "r"); sub("ready", "r"); sub("next", "r"); sub("node", "r", "id"); sub("render", "r")
+    sub("dispatchable", "r").add_argument("--max", type=int, default=None); sub("unlocked", "r", "id"); sub("collide", "r", "id", "other")
+    cm = sub("commit", "r", "id"); cm.add_argument("-m", "--message", required=True); cm.add_argument("--close", action="store_true")
+    cm.add_argument("paths", nargs="*")
     sub("start", "r", "id", "session"); sub("close", "r", "id", "hash", "outcome", session="")
     sub("block", "r", "id", "why", session=""); sub("event", "r", "event", "outcome", session="")
     lg = sub("ledger", "r"); lg.add_argument("n", nargs="?", type=int, default=3); lg.add_argument("--all", action="store_true")
-    sub("init", "r", goal="", subject=""); sub("add", "r", id="", subject="", deps="", spec="", gate="", after=None)
-    sub("set", "r", "id", status=None, deps=None, spec=None, gate=None, subject=None)
-    sub("gate", "r", "name"); sub("guards", "r"); sub("brief", "r")
+    sub("init", "r", goal="", subject=""); sub("add", "r", id="", subject="", deps="", spec="", gate="", locks="", after=None)
+    sub("set", "r", "id", status=None, deps=None, spec=None, gate=None, subject=None, locks=None)
+    sub("gate", "r", "name"); sub("guards", "r"); sub("brief", "r").add_argument("id", nargs="?", default=None)
     sub("pause", "r", "reason").add_argument("note", nargs="?", default=""); sub("resume", "r"); sub("stop", "r")
     sub("open", "r"); sub("calls", "r")
     a = ap.parse_args(argv)
@@ -680,10 +809,32 @@ def dispatch(a):
     if c == "node":
         n = by_id(rm).get(a.id)
         if not n: raise KeyError(a.id)
-        for k in ("id", "subject", "status", "deps", "spec", "gate", "commit"):
+        for k in ("id", "subject", "status", "deps", "spec", "gate", "commit", "locks"):
             v = getattr(n, k); print(f"{k}: {', '.join(v) if isinstance(v, list) else v}")
+        print(f"holds: {', '.join(effective_locks(n)) or 'none'}"); return 0
+    if c == "dispatchable":
+        cap = a.max if a.max is not None else parse_config(ge_root() / "config.md").max_parallel
+        for x in running(rm): print(f"running: {x.id} ({x.status[len('in progress ('):-1]}) holds {', '.join(effective_locks(x)) or 'none'}", file=sys.stderr)
+        ds = dispatchable(rm, cap)
+        for n in ds: print(f"{n.id} | {n.subject} | {', '.join(n.gate)} | {', '.join(effective_locks(n)) or 'none'}")
+        if not ds:
+            print("none")
+            if not running(rm):
+                for x in rm.nodes:
+                    if kind(x.status) == "blocked": print(f"blocked: {x.id} — {x.status}")
         return 0
-    if c == "start": start(a.r, a.id, a.session); print(f"{a.id}: in progress ({a.session})"); return 0
+    if c == "unlocked":
+        for n in unlocked(rm, a.id): print(n.id)
+        return 0
+    if c == "collide": collide(a.r, a.id, a.other); print(f"{a.id}: holds tree; collision with {a.other} recorded"); return 0
+    if c == "commit":
+        h, err = commit(a.r, a.id, a.message, a.paths, a.close)
+        if err: print(err, file=sys.stderr); return 1
+        print(h); return 0
+    if c == "start":
+        hit = start(a.r, a.id, a.session)
+        if hit: print(f"{a.id} not started: its locks collide with running {', '.join(hit)}", file=sys.stderr); return 1
+        print(f"{a.id}: in progress ({a.session})"); return 0
     if c == "close":
         state = close(a.r, a.id, a.hash, a.outcome, a.session); print(f"{a.id}: {state + ' ' if state else ''}done {a.hash}"); return 0
     if c == "block": block(a.r, a.id, a.why, a.session); print(f"{a.id}: blocked: {a.why}"); return 0
@@ -693,14 +844,14 @@ def dispatch(a):
         return 0
     if c == "add":
         if not a.id or not a.subject: print("--id and --subject are required", file=sys.stderr); return 1
-        add_node(rm, Node(a.id, a.subject, "open", split_list(a.deps), a.spec, split_list(a.gate), ""), a.after); print(f"added {a.id}")
+        add_node(rm, Node(a.id, a.subject, "open", split_list(a.deps), a.spec, split_list(a.gate), "", split_list(a.locks)), a.after); print(f"added {a.id}")
         render_to_file(a.r); return 0
     if c == "set":
         if a.status is not None and kind(a.status) == "bad":  # a status no reader knows makes the node
             print(f"bad status {a.status!r}; accepted: open | in progress (<session>) | done <hash> | "  # neither ready nor done
                   "blocked: <why> | skipped: <why>", file=sys.stderr)
             return 1
-        for k in ("status", "deps", "spec", "gate", "subject"):
+        for k in ("status", "deps", "spec", "gate", "subject", "locks"):
             v = getattr(a, k)
             if v is not None: set_field(rm, a.id, k, v); print(f"{a.id}.{k} = {v}")
         render_to_file(a.r); return 0
@@ -725,8 +876,8 @@ def dispatch(a):
         for l in guards(a.r, parse_config(ge_root() / "config.md")): print(l, flush=True)
         return 0
     if c == "brief":
-        text, code = brief(a.r); print(text)
-        if code == 2: print("brief: next.md does not name the ready node; minimal brief built from the row", file=sys.stderr)
+        text, code = brief(a.r, a.id); print(text)
+        if code == 2: print("brief: no kickoff names this node; minimal brief built from the row", file=sys.stderr)
         return code
     if c == "pause":
         if not flatten(a.reason):  # an empty first line is a PAUSE the runner cannot act on

@@ -21,7 +21,7 @@ def test_start_renders_amber_and_writes_a_started_row(project):
     js = (d / "status.js").read_text(encoding="utf-8")
     assert js.startswith("geUpdate(") and js.rstrip().endswith(");")
     rows = ge.read_ledger("demo")
-    assert [r[3] for r in rows] == ["started"] and rows[0][2] == "A" and rows[0][4] == "s1"
+    assert [r[3] for r in rows] == ["started"] and rows[0][2] == "A" and rows[0][4] == "s1 holds tree"
     assert re.match(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}$", rows[0][0])
 
 def test_ledger_verb_hides_started_rows_unless_all(project, capsys):
