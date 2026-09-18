@@ -25,7 +25,7 @@ Several tasks run at once. The roadmap's `locks` column says what each task hold
 
        roadmap: <r>
        task: <id>
-       ge: python "C:/AI/GraphEngineering/scripts/ge.py"   (this project's exact interpreter and path)
+       ge: python "C:/AI/plugin-dev/graph-engineering/scripts/ge.py"   (this project's exact interpreter and path)
        session: <session>
        link: <this session's Claude-Session URL>
 

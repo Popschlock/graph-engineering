@@ -8,7 +8,7 @@ REPO = Path(__file__).resolve().parents[1]
 
 def wlah():
     home = Path.home() / ".claude" / "plugins" / "cache" / "wlah" / "wlah"
-    for c in [Path(r"C:\AI\Wlah\scripts\wlah_check.py")] + sorted(map(Path, glob.glob(str(home / "*" / "scripts" / "wlah_check.py"))), reverse=True):
+    for c in [Path(r"C:\AI\plugin-dev\wlah\scripts\wlah_check.py")] + sorted(map(Path, glob.glob(str(home / "*" / "scripts" / "wlah_check.py"))), reverse=True):
         if c.is_file():
             spec = importlib.util.spec_from_file_location("wlah_check", c); m = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(m); return m
