@@ -473,7 +473,9 @@ def brief(r, nid=None):
     """-> (text, code): 0 = a kickoff named the node; 2 = none did, minimal brief built; 1 = nothing ready (or
     nid is not a ready node). Without nid, the first ready node, as before 0.4."""
     rm = load(r); n = by_id(rm).get(nid) if nid else next_node(rm)
-    if n is None or (nid and not is_ready(n, by_id(rm))): return "nothing ready" if not nid else f"{nid} is not ready", 1
+    # since 0.5 the task agent fetches its own brief after `start`, so an in-progress node is briefable too
+    if n is None or (nid and not (is_ready(n, by_id(rm)) or kind(n.status) == "in progress")):
+        return "nothing ready" if not nid else f"{nid} is not ready", 1
     body = kickoff_for(r, n.id); code = 0 if body else 2
     if code: body = minimal_brief(rm, n)
     cfg = parse_config(ge_root() / "config.md")
@@ -767,7 +769,9 @@ def main(argv=None):
     lg = sub("ledger", "r"); lg.add_argument("n", nargs="?", type=int, default=3); lg.add_argument("--all", action="store_true")
     sub("init", "r", goal="", subject=""); sub("add", "r", id="", subject="", deps="", spec="", gate="", locks="", after=None)
     sub("set", "r", "id", status=None, deps=None, spec=None, gate=None, subject=None, locks=None)
-    sub("gate", "r", "name"); sub("guards", "r"); sub("brief", "r").add_argument("id", nargs="?", default=None)
+    sub("gate", "r", "name"); sub("guards", "r")
+    b = sub("brief", "r"); b.add_argument("id", nargs="?", default=None)
+    b.add_argument("--check", action="store_true", help="exit code and one line only, no brief body")
     sub("pause", "r", "reason").add_argument("note", nargs="?", default=""); sub("resume", "r"); sub("stop", "r")
     sub("open", "r"); sub("calls", "r")
     a = ap.parse_args(argv)
@@ -876,7 +880,9 @@ def dispatch(a):
         for l in guards(a.r, parse_config(ge_root() / "config.md")): print(l, flush=True)
         return 0
     if c == "brief":
-        text, code = brief(a.r, a.id); print(text)
+        text, code = brief(a.r, a.id)
+        if a.check: print({0: "brief: kickoff", 2: "brief: minimal (no kickoff)", 1: text}[code]); return code
+        print(text)
         if code == 2: print("brief: no kickoff names this node; minimal brief built from the row", file=sys.stderr)
         return code
     if c == "pause":

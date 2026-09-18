@@ -161,6 +161,22 @@ def test_brief_rule_4_blocks_on_a_check_that_could_not_run(project, capsys):
     assert "tree: UNKNOWN" in rules and "guard <name>: ERROR" in rules
     assert "blocked: guard tree" in rules and "blocked: guard <name>" in rules
 
+def test_brief_serves_an_in_progress_node_and_check_prints_one_line(project, capsys):
+    """Since 0.5 the runner starts a node and the task agent fetches its own brief, so `brief` must accept
+    `in progress`; `--check` gives the runner the exit code without the body in its context."""
+    write_roadmap(project, "demo", [("A", "first", "in progress (s1)", "", "s", "unit"),
+                                    ("B", "second", "open", "", "s", "unit")])
+    (project / "ge/demo/kickoffs").mkdir(parents=True, exist_ok=True)
+    (project / "ge/demo/kickoffs/A.md").write_text("# kickoff: A" + chr(10) + chr(10) + "build the first thing" + chr(10), encoding="utf-8")
+    assert ge.main(["brief", "demo", "A"]) == 0
+    assert "build the first thing" in capsys.readouterr().out
+    assert ge.main(["brief", "demo", "A", "--check"]) == 0
+    assert capsys.readouterr().out.strip() == "brief: kickoff"
+    assert ge.main(["brief", "demo", "B", "--check"]) == 2
+    assert capsys.readouterr().out.strip() == "brief: minimal (no kickoff)"
+    write_roadmap(project, "demo", [("A", "first", "done abc1234", "", "s", "unit")])
+    assert ge.main(["brief", "demo", "A", "--check"]) == 1
+
 def test_open_renders_then_launches(project, capsys, monkeypatch):
     """/ge-status step 3 runs this branch; stub Popen so the suite itself launches nothing."""
     write_roadmap(project, "demo", ROWS3)

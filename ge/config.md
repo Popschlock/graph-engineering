@@ -3,7 +3,7 @@
 ## Gates
 | name | command | success | artifact | floor |
 |---|---|---|---|---|
-| pytest | python -m pytest tests/ -q | `(?m)^(\d+) passed(?![^\n]*\b(?:failed\|error))` | stdout | 62 |
+| pytest | python -m pytest tests/ -q | `(?m)^(\d+) passed(?![^\n]*\b(?:failed\|error))` | stdout | 95 |
 
 ## Guards
 | name | command | blocked when |

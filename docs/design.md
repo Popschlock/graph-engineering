@@ -310,12 +310,16 @@ close/block/ledger, render (the HTML contains every node id), and gate matching.
    order, up to `max parallel` minus the number running. `none` with nothing
    running → stop ("nothing ready"; blocked nodes listed). `none` with lanes
    running → wait for a notification.
-3. For each: `ge.py brief <r> <id>` (refuses a missing kickoff, builds a minimal
-   brief, notes it). `dry` prints every brief and stops.
+3. For each: `ge.py brief <r> <id> --check` (exit code and one line: a kickoff
+   exists, or a minimal brief will be built from the row, noted in the ledger).
+   The body never enters the runner's context. `dry` prints every full brief
+   and stops.
 4. `ge.py start` each (a collision is refused, exit 1: skip that node this
    round); then ONE message with every `Agent` call in it, `ge-task` or
-   `ge-reader` for `READ:` nodes, each with its brief verbatim plus the session
-   line. Wait for any notification. Say `dispatched: <ids>`.
+   `ge-reader` for `READ:` nodes, each prompt five lines (`roadmap:`, `task:`,
+   `ge:`, `session:`, `link:`) and nothing pasted: the agent runs
+   `ge.py brief <r> <id>` itself (since 0.5 `brief` serves an `in progress`
+   node). Wait for any notification. Say `dispatched: <ids>`.
 5. On a task's report: `closed: <id>` → dispatch `ge-verifier` for it and, in the
    same message, dispatch whatever `ge.py dispatchable` now allows. The other
    lanes keep running. PASS → `ge.py close`. MISS → when the first miss line
@@ -365,6 +369,13 @@ never a repo-wide clean tree; its stale-artifact baseline is the task's `started
 time; its floor comparison reads the previous `done` row carrying the same gate
 token. The reviewer proposes a `locks` line for every `revised` row that begins
 `collision:`.
+
+Since 0.5 the task and reader agents fetch their own brief (`ge.py brief <r>
+<id>` as their first action) and work under a cost discipline (§15): a proof
+level from the kickoff (`smoke` unless it says `measure`), every live probe
+batched into one call that prints one line per check, a hard stop at 150 tool
+calls with the gates not yet run, and the docs and change-log lines of a change
+written inside the row that makes it.
 
 ## 8. Hook
 
@@ -485,3 +496,48 @@ back to back, four of them reads that shared nothing.
 6. `/ge-build-roadmap` plans before it writes: it reads the project, asks what
    only one task may use at a time, and sets deps to real data dependencies
    instead of chaining a phase (§4).
+
+## 15. What 0.5 changed
+
+Cost discipline, off the owner's reading that a roadmap took longer and burned
+more than the same work done by hand in one session. The week measured
+(CombatDemo, 2026-09-10 to 09-17, weighted at Opus price ratios: input 1,
+cache write 1.25, cache read 0.1, output 5):
+
+| where | share | what drove it |
+|---|---|---|
+| 76 task agents | 56% | 275–444 tool calls per engine row, context peaking at 494–608k, cache reads 93% of tokens; ~90% of the calls came before the first gate, about half of them live-measurement probes issued one per call |
+| 118 other subagents | 21% | explorers and one-off dispatches outside the roadmaps |
+| 7 orchestrating sessions | 19% | 900 turns each; 2.4M output tokens from pasting briefs into `Agent` prompts |
+| 83 verifiers | 3% | ~0.5M each; cheap, and they caught two misses |
+| 18 reviews | 1% | |
+
+Wall clock: 53 rows in 52 hours, median 39 minutes a row, engine rows 40–70;
+twelve docs-only rows at 12–23 minutes each. The owner's hypothesis — too many
+small rows, each with its own build-and-verify cycle — is the second-order term;
+the first-order term is the length of each row's transcript, and the two
+multiply: every row re-reads its kickoff on every turn, runs the gates twice,
+cycles the editor, and pays a verifier.
+
+1. **Briefs by pointer** (§5, §7). The runner dispatches five lines; the agent
+   runs `ge.py brief <r> <id>` itself, and `brief` serves an `in progress`
+   node. `ge.py brief --check` gives the runner the exit code with no body.
+   Removes the brief from the orchestrator's context twice over (read, then
+   pasted as output).
+2. **One build-and-verify cycle per row** (§4, `/ge-build-roadmap` step 3,
+   `/ge-revise-roadmap` step 2). Related low-risk changes that share a lock set
+   travel together; docs, handoff and change-log lines belong to the row that
+   makes the change; a docs row exists only when docs are the deliverable; a
+   `READ:` row only when its answer changes the graph; a playtest's findings
+   become one row per lock set.
+3. **Proof by budget** (§7, the agents). Every kickoff names `smoke` or
+   `measure`; `smoke` is the default and means gates green plus one live run of
+   the user-facing path. Probes are batched into one call printing one line per
+   check. A hard stop at 150 tool calls with the gates not yet run: run them,
+   close with what is proved, list the rest as untested.
+4. Kickoffs under 1,200 words, because an agent re-reads its kickoff on every
+   turn.
+
+Pinned by `tests/test_ge.py::test_brief_serves_an_in_progress_node_and_check_prints_one_line`.
+Not changed: the verifier per close (3%, and it caught the misses) and the
+review cadence (1%).
